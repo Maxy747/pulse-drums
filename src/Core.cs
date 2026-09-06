@@ -32,6 +32,7 @@ namespace Pulse {
         public int[] InstrumentNotes { get; set; }
         public string[] SampleFiles { get; set; }
         public bool ClassicView { get; set; }
+        public string ThemeName { get; set; }
         public string SampleFolder { get; set; }
         public bool SampleDefaultsApplied { get; set; }
         public bool MidiEnabled { get; set; }
@@ -43,6 +44,7 @@ namespace Pulse {
         }
         public Settings Copy() { var s = (Settings)MemberwiseClone(); s.Pads = Pads.Select(p => p.Copy()).ToArray(); s.Inputs = Inputs == null ? null : (int[])Inputs.Clone(); s.InstrumentNotes = InstrumentNotes == null ? null : (int[])InstrumentNotes.Clone(); s.SampleFiles = SampleFiles == null ? null : (string[])SampleFiles.Clone(); return s; }
         public void Normalize() {
+            if (ThemeName != "Red" && ThemeName != "Blue") ThemeName = "Green";
             if (Pads == null || Pads.Length != 8) Pads = new Settings().Pads;
             for (int i = 0; i < 8; i++) {
                 if (Pads[i] == null) Pads[i] = new Settings().Pads[i];

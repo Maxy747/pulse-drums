@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace Pulse {
-    // Small polyphonic drum synthesizer. No sample packs, browser, or MIDI driver required.
+    // Stereo sample player with a synthesizer fallback.
     public sealed class AudioEngine : IDisposable {
         [StructLayout(LayoutKind.Sequential, Pack = 2)] struct Format { public ushort Tag, Channels; public uint Rate, BytesPerSecond; public ushort Align, Bits, Extra; }
         [StructLayout(LayoutKind.Sequential)] struct Header { public IntPtr Data; public uint Length, Recorded; public IntPtr User; public uint Flags, Loops; public IntPtr Next, Reserved; }
@@ -27,6 +27,7 @@ namespace Pulse {
         readonly uint headerSize = (uint)Marshal.SizeOf(typeof(Header));
         IntPtr device;
         Thread worker;
+        double limiterGain = 1;
         volatile bool stop;
         public volatile string Error = "";
         public float Volume = .7f;
@@ -66,24 +67,40 @@ namespace Pulse {
         }
         public void Hit(int pad, int velocity) { lock (gate) { if (voices.Count >= 48) voices.RemoveAt(0); voices.Add(new Voice { Sample = samples[pad], Gain = velocity / 127f }); } }
         public void Panic() { lock (gate) voices.Clear(); }
+        internal void MixBlock(short[] output) {
+            lock (gate) {
+                for (int i = 0; i < output.Length; i += 2) {
+                    double left = 0, right = 0;
+                    foreach (var v in voices) if (v.Position + 1 < v.Sample.Length) {
+                        left += v.Sample[v.Position++] * v.Gain;
+                        right += v.Sample[v.Position++] * v.Gain;
+                    }
+                    // Clean headroom; stereo-linked protection acts only on overloads.
+                    left *= Volume * .65; right *= Volume * .65;
+                    double peak = Math.Max(Math.Abs(left), Math.Abs(right));
+                    double target = peak > .98 ? .98 / peak : 1;
+                    limiterGain = target < limiterGain ? target : Math.Min(target, limiterGain + .0002);
+                    output[i] = (short)(left * limiterGain * 32767);
+                    output[i+1] = (short)(right * limiterGain * 32767);
+                }
+                voices.RemoveAll(v => v.Position >= v.Sample.Length);
+            }
+        }
         void Pump() {
             try {
+                int nextBuffer = 0;
                 while (!stop) {
-                    signal.WaitOne(20);
-                    for (int b = 0; b < Buffers && !stop; b++) {
+                    signal.WaitOne(5);
+                    // Always refill in playback order, including when completions
+                    // straddle the ring boundary. Events can coalesce under load.
+                    for (int count = 0; count < Buffers && !stop; count++) {
+                        int b = nextBuffer;
                         Header h = (Header)Marshal.PtrToStructure(headers[b], typeof(Header));
-                        if ((h.Flags & 1) == 0) continue;
-                        lock (gate) {
-                            for (int i = 0; i < pcm.Length; i++) {
-                                double value = 0;
-                                foreach (var v in voices) if (v.Position < v.Sample.Length) value += v.Sample[v.Position++] * v.Gain;
-                                // Smooth saturation keeps simultaneous hits below digital full scale.
-                                pcm[i] = (short)(Math.Tanh(value * Volume * .8) * 30000);
-                            }
-                            voices.RemoveAll(v => v.Position >= v.Sample.Length);
-                        }
+                        if ((h.Flags & 1) == 0) break;
+                        MixBlock(pcm);
                         Marshal.Copy(pcm, 0, data[b], pcm.Length);
                         if (waveOutWrite(device, headers[b], headerSize) != 0) throw new InvalidOperationException("Audio device stopped. Restart Pulse after changing audio devices.");
+                        nextBuffer = (nextBuffer + 1) % Buffers;
                     }
                 }
             } catch (Exception e) { Error = e.Message; }

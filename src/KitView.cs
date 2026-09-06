@@ -34,8 +34,8 @@ namespace Pulse {
             if (new Rect(459,464,95,90).Contains(p)) return 5;
             return -1;
         }
-        static SolidColorBrush B(string value) { var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(value)); b.Freeze(); return b; }
-        static Color Mix(string from, string to, double amount) { Color a = (Color)ColorConverter.ConvertFromString(from), b = (Color)ColorConverter.ConvertFromString(to); return Color.FromRgb((byte)(a.R+(b.R-a.R)*amount),(byte)(a.G+(b.G-a.G)*amount),(byte)(a.B+(b.B-a.B)*amount)); }
+        static SolidColorBrush B(string value) { var b = new SolidColorBrush(Theme.Color(value)); b.Freeze(); return b; }
+        static Color Mix(string from, string to, double amount) { Color a = Theme.Color(from), b = Theme.Color(to); return Color.FromRgb((byte)(a.R+(b.R-a.R)*amount),(byte)(a.G+(b.G-a.G)*amount),(byte)(a.B+(b.B-a.B)*amount)); }
         static Pen Pen(string color, double width) { return new Pen(B(color),width); }
         static void Label(DrawingContext dc, string text, Point center, double size, string color) {
             var t = new FormattedText(text,CultureInfo.InvariantCulture,FlowDirection.LeftToRight,new Typeface("Segoe UI"),size,B(color),1.0);

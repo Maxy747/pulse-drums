@@ -13,12 +13,19 @@ namespace Pulse {
         volatile bool learning;
         int learnPart;
         LearnSession learn;
+        int[] learnOriginal;
         SampleChoice[] library = new SampleChoice[0];
         readonly int[] sampleVersions = new int[8];
         readonly string[] sampleStates = Enumerable.Repeat("Synth fallback",8).ToArray();
         bool sampleUpdating;
         Pad SelectedPad { get { return settings.Pads[settings.Inputs[selected]]; } }
         void BuildKitControls() {
+            var themes = Get<ComboBox>("ThemeCombo");
+            themes.ItemsSource = new[] { "Green", "Red", "Blue" }; themes.SelectedItem = settings.ThemeName;
+            themes.SelectionChanged += delegate {
+                settings.ThemeName = (string)themes.SelectedItem; Theme.Apply(settings.ThemeName);
+                if (kitView != null) kitView.InvalidateVisual(); Changed(false);
+            };
             Get<ComboBox>("TransposeCombo").ItemsSource = Enumerable.Range(-48,97).ToArray(); Get<ComboBox>("TransposeCombo").SelectedItem = settings.Transpose;
             Get<ComboBox>("TransposeCombo").SelectionChanged += delegate { if (updating) return; settings.Transpose = (int)Get<ComboBox>("TransposeCombo").SelectedItem; midi.Panic(); Changed(false); };
             Get<Slider>("LengthSlider").Value = settings.NoteOffMs; Get<TextBlock>("LengthValue").Text = settings.NoteOffMs.ToString();
@@ -29,7 +36,14 @@ namespace Pulse {
             Get<Button>("ClassicViewButton").Click += delegate { SetView(true); };
             Get<Button>("SetupAllButton").Click += delegate { BeginLearn(true); };
             Get<Button>("AssignOneButton").Click += delegate { BeginLearn(false); };
-            Get<Button>("SetupCancel").Click += delegate { EndLearn(false); };
+            Get<Button>("SetupCancel").Click += delegate { EndLearn(learn != null && learn.Complete); };
+            Get<Button>("SetupUndo").Click += delegate {
+                if (learn == null || !learn.CanUndo) return;
+                if (learn.Complete) { settings.Inputs = (int[])learnOriginal.Clone(); Changed(false); }
+                learn.Undo(clock.ElapsedMilliseconds); learning = true;
+                Frame discarded; while (frames.TryDequeue(out discarded)) { }
+                midi.Panic(); if (audio != null) audio.Panic(); UpdateLearn();
+            };
             var route = Get<ComboBox>("RouteCombo"); route.Items.Add("Samples · play through speakers"); route.Items.Add("Ableton / MIDI only"); route.Items.Add("Samples + MIDI");
             route.SelectedIndex = settings.MidiEnabled && settings.Sound ? 2 : settings.Sound ? 0 : 1;
             route.SelectionChanged += delegate { if (updating) return; settings.Sound = route.SelectedIndex != 1; settings.MidiEnabled = route.SelectedIndex != 0; Get<CheckBox>("SoundToggle").IsChecked = settings.Sound; midi.Panic(); if (audio != null) audio.Panic(); lastMidiScan = -10000; Changed(false); };
@@ -66,6 +80,7 @@ namespace Pulse {
             if (f.Kind == "HIT") Hit(part,f.Value,false); else if (f.Kind == "RAW") Enqueue(new Frame("RAW",part,f.Value));
         }
         void BeginLearn(bool all) {
+            learnOriginal = (int[])settings.Inputs.Clone();
             learn = new LearnSession(settings.Inputs,selected,all,clock.ElapsedMilliseconds); learnPart = learn.Part; learning = true;
             midi.Panic(); if (audio != null) audio.Panic(); Frame f; while (frames.TryDequeue(out f)) { }
             SetView(false); SelectPad(learnPart); Get<Border>("SetupPanel").Visibility = Visibility.Visible; UpdateLearn();
@@ -75,7 +90,14 @@ namespace Pulse {
         void UpdateLearn() {
             if (!learning || learn == null) return;
             learn.Tick(clock.ElapsedMilliseconds);
-            if (learn.Complete) { settings.Inputs = (int[])learn.Map.Clone(); EndLearn(true); Changed(false); SelectPad(selected); return; }
+            if (learn.Complete) {
+                settings.Inputs = (int[])learn.Map.Clone(); learning = false; Changed(false); SelectPad(selected);
+                Get<TextBlock>("SetupTitle").Text = "Setup complete";
+                Get<TextBlock>("SetupHint").Text = "Assignments saved. Play your kit, or undo the last part to record it again.";
+                Get<Button>("SetupUndo").IsEnabled = learn.CanUndo; Get<Button>("SetupCancel").Content = "Close setup";
+                if (kitView != null) kitView.Update(meters,selected,-1); return;
+            }
+            Get<Button>("SetupUndo").IsEnabled = learn.CanUndo; Get<Button>("SetupCancel").Content = "Cancel setup";
             if (learnPart != learn.Part) { learnPart = learn.Part; SelectPad(learnPart); }
             Get<TextBlock>("SetupTitle").Text = (learn.All ? "Step " + (learn.Part+1) + " of 8 · " : "Assign · ") + Kit.Names[learn.Part];
             Get<TextBlock>("SetupHint").Text = learn.Confirmations == 0 ? (learn.Hint == "" ? "Strike " + Kit.Names[learn.Part] + " twice. Waiting for your first strike… No buttons needed." : learn.Hint) : "1 of 2 · A" + learn.Candidate + " heard. Strike " + Kit.Names[learn.Part] + " once more to confirm.";

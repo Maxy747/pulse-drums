@@ -67,7 +67,7 @@ namespace Pulse {
         public Controller(bool isSmoke, bool startHidden) {
             smoke = isSmoke; background = startHidden;
             string warning = ""; settings = smoke ? new Settings() : SettingsStore.Load(SettingsStore.PathName, out warning); settings.Normalize(); live = settings.Copy(); savePath = SettingsStore.PathName;
-            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Pulse.Main.xaml")) Window = (Window)XamlReader.Load(stream);
+            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Pulse.Main.xaml")) using (var reader = new StreamReader(stream)) Window = Theme.Load(reader.ReadToEnd(), settings.ThemeName);
             Window.Height = Math.Min(Window.Height,SystemParameters.WorkArea.Height - 24);
             Window.SourceInitialized += delegate { int dark = 1; try { DwmSetWindowAttribute(new WindowInteropHelper(Window).Handle, 20, ref dark, 4); } catch { } };
             MakePads(); BindControls(); BuildKitControls(); SelectPad(0);
@@ -104,7 +104,7 @@ namespace Pulse {
         }
         [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
         T Get<T>(string name) where T : class { return Window.FindName(name) as T; }
-        static Brush Brush(string color) { return (Brush)new BrushConverter().ConvertFromString(color); }
+        static Brush Brush(string color) { return Theme.Brush(color); }
         static TextBlock Text(string value, double size, string color) { return new TextBlock { Text = value, FontSize = size, Foreground = Brush(color) }; }
         void MakePads() {
             var grid = Get<UniformGrid>("PadsGrid");
@@ -302,9 +302,20 @@ namespace Pulse {
                 long setupTime = clock.ElapsedMilliseconds + 500;
                 for (int step = 0; step < 8; step++) { long now = setupTime + step*1200; learn.Feed(7-step,600,now); learn.Tick(now+200); UpdateLearn(); learn.Feed(7-step,600,now+500); learn.Tick(now+700); UpdateLearn(); }
                 if (learning || !settings.Inputs.SequenceEqual(new[]{7,6,5,4,3,2,1,0}) || settings.Pads[0].Hit != 140 || settings.InstrumentNotes[0] != 42) throw new Exception("All-pad setup moved sensor settings or failed to save mapping");
+                Get<Button>("SetupUndo").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                if (!learning || learn.Part != 7 || learn.Complete || !settings.Inputs.SequenceEqual(before)) throw new Exception("Undo completed setup failed");
+                Screenshot(System.IO.Path.Combine(folder,"pulse-setup-undo.png"));
+                Get<Button>("SetupUndo").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                if (learn.Part != 6 || learn.Map.Distinct().Count() != 8) throw new Exception("Repeated setup undo failed");
                 var defaults = new Settings(); defaults.Normalize(); ApplyPreset(defaults); SelectPad(0); SetView(false);
                 if (!settings.Inputs.SequenceEqual(Kit.DefaultInputs) || SelectedPad.Hit != 20) throw new Exception("Preset restore failed");
-                File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"PASS: kit/classic views, isolated hit glow, sliders, audition, calibrated reset, MIDI note mapping, learn cancel, all-eight assignment, preset restore. No hardware or user settings writes.");
+                foreach (string theme in new[] { "Red", "Blue", "Green" }) {
+                    Get<ComboBox>("ThemeCombo").SelectedItem = theme; Window.UpdateLayout();
+                    if (Theme.Name != theme || settings.ThemeName != theme) throw new Exception("Theme selection failed");
+                    kitView.Update(new double[]{0,1,0,0,0,0,0,0},selected,-1);
+                    Screenshot(System.IO.Path.Combine(folder,"pulse-theme-" + theme.ToLowerInvariant() + ".png"));
+                }
+                File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"PASS: green/red/blue themes, kit/classic views, isolated hit glow, sliders, audition, calibrated reset, MIDI note mapping, learn cancel, all-eight assignment, undo after completion, repeated undo, preset restore. No hardware or user settings writes.");
             } catch (Exception e) { File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"FAIL: " + e); Environment.ExitCode = 1; }
             exiting = true; Window.Close();
         }

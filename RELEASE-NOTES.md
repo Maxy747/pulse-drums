@@ -1,4 +1,11 @@
-Pulse 2.0.1 — your physical kit, on screen, with V05 sound defaults.
+Pulse 2.0.2 — themes, kick drum icon, setup undo and cleaner playback.
+
+- A bass drum icon replaces the old logo in the app, executable and tray.
+- Green, Red and Blue themes are available at the top; the kit, hit glows and controls update together and remember your choice.
+- Undo last part reverses the last setup assignment, including after completing setup. Repeated undo and re-recording preserve one-to-one input mappings.
+- Audio buffers now refill in playback order across ring boundaries, avoiding reordered chunks when Windows coalesces completion events.
+- Removed always-on saturation. Samples play linearly with headroom and stereo-linked overload protection.
+- Verified with 451 assertions, all 360 WAV decodes and WPF interaction/render checks. Audible improvement on the user's output still needs listening confirmation.
 
 - Both GSCW kit presets now default to V05 for every piece. Individual choices and saved presets remain editable.
 

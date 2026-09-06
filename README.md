@@ -14,7 +14,7 @@ Requires Windows 10/11 x64, .NET Framework 4.8, a Windows audio output and your 
 
 Close Arduino Serial Monitor and the old drum bridge to free the port. Open Pulse, plug in the Nano, and hit a pad once to verify the serial protocol. Saved thresholds are sent automatically. No Connect, Apply or Save-settings button is needed.
 
-The default view follows the numbered physical kit. Pieces glow green on a hit, independently and simultaneously. Click a piece to tune it; double-click, press **1–8**, or use **Audition** to test its sound. **Classic controls** switches to the previous pad-card view. This view choice is remembered.
+The default view follows the numbered physical kit. Pieces glow on a hit, independently and simultaneously. The **Theme** selector at the top switches between **Green**, **Red**, and **Blue**, including the kit glow and controls; the choice is remembered. Click a piece to tune it; double-click, press **1–8**, or use **Audition** to test its sound. **Classic controls** switches to the previous pad-card view. This view choice is remembered.
 
 | Number | Instrument | Initial input | Default MIDI note |
 | --- | --- | --- | ---: |
@@ -33,6 +33,8 @@ The numbers describe physical positions, **not wiring**. If inputs are swapped, 
 2. Strike only the requested instrument **twice**. Pulse picks the largest raw peak in each short capture window and uses a brief ringing guard to keep one strike from counting twice.
 3. Two matching strikes confirm the input and move to the next piece automatically. If the strikes disagree or an input was already assigned, it keeps listening. There are no Confirm or Next buttons.
 4. Full setup saves after all eight pieces have been confirmed twice. Cancel discards the draft. One-piece assignment works the same way and swaps the displaced input so two pieces cannot accidentally share one sensor.
+
+**Undo last part** restores the map from before the last confirmed assignment and listens for that piece again. It can be used repeatedly, including on the completion panel. Before any part is confirmed, it clears the first strike. Undoing a completed setup reopens the draft; cancelling that draft restores the map from before that setup session.
 
 Sounds are paused during setup. Learning uses real serial sensor peaks, not mouse/keyboard auditions. The same assignment controls the kit glow, sample and MIDI note. Trigger calibration remains attached to each physical Arduino input. A sensor must exceed its current firmware threshold to be detected; adjust the threshold if a pad never registers.
 

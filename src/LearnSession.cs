@@ -10,6 +10,8 @@ namespace Pulse {
         public int Confirmations;
         public string Hint = "";
         readonly HashSet<int> used = new HashSet<int>();
+        sealed class Step { public int Part, Input; public int[] Map; }
+        readonly Stack<Step> history = new Stack<Step>();
         readonly int[] peaks = new int[8];
         long until, listenAfter;
         public LearnSession(int[] map, int part, bool all, long now) { Map = (int[])map.Clone(); All = all; Part = all ? 0 : part; Retry(now); }
@@ -28,8 +30,16 @@ namespace Pulse {
             if (Confirmations >= 2) Accept(now);
         }
         public bool IsDuplicate { get { return Candidate >= 0 && used.Contains(Candidate); } }
+        public bool CanUndo { get { return history.Count > 0 || Candidate >= 0; } }
+        public void Undo(long now) {
+            if (history.Count > 0) {
+                var step = history.Pop(); Map = step.Map; Part = step.Part; used.Remove(step.Input); Complete = false;
+            }
+            Retry(now);
+        }
         public bool Accept(long now) {
             if (Complete || Candidate < 0 || IsDuplicate || Confirmations < 2) return false;
+            history.Push(new Step { Part = Part, Input = Candidate, Map = (int[])Map.Clone() });
             Map = Kit.Assign(Map,Part,Candidate); used.Add(Candidate);
             if (!All || Part == 7) { Complete = true; return true; }
             Part++; Retry(now); return false;

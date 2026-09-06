@@ -51,6 +51,10 @@ namespace Pulse {
                 assignment.Feed(6,500,2000); assignment.Tick(2200); assignment.Feed(6,500,2500); assignment.Tick(2700);
                 for (int step = 2; step < 8; step++) { long now = 4000 + step*1000; assignment.Feed(7-step,500,now); assignment.Tick(now+200); assignment.Feed(7-step,500,now+450); assignment.Tick(now+650); }
                 Check(assignment.Complete && assignment.Map.SequenceEqual(new[]{7,6,5,4,3,2,1,0}),"Full kit setup commits a complete one-to-one map");
+                assignment.Undo(20000); Check(!assignment.Complete && assignment.Part == 7 && assignment.Confirmations == 0,"Undo final part reopens setup");
+                assignment.Undo(21000); Check(assignment.Part == 6 && assignment.Map.Distinct().Count() == 8,"Repeated undo restores previous bijective map");
+                assignment.Feed(1,500,21400); assignment.Tick(21600); assignment.Feed(1,500,21900); assignment.Tick(22100);
+                Check(assignment.Part == 7,"Undone sensor can be assigned again");
                 var mismatch = new LearnSession(calibrated.Inputs,3,false,0); mismatch.Feed(1,400,400); mismatch.Tick(600); mismatch.Feed(2,400,900); mismatch.Tick(1100);
                 Check(!mismatch.Complete && mismatch.Candidate == 2 && mismatch.Confirmations == 1,"Mismatched strikes need another matching strike");
                 mismatch.Feed(2,400,1500); mismatch.Tick(1700); Check(mismatch.Complete && mismatch.Map[3] == 2,"Single-piece setup completes hands-free");
@@ -58,7 +62,8 @@ namespace Pulse {
                 string folder = Path.Combine(Path.GetTempPath(), "pulse-tests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(folder);
                 try {
                     string path = Path.Combine(folder,"settings.xml"), warning;
-                    s.Pads[4].VelocityFloor = 50; SettingsStore.Save(s,path); var loaded = SettingsStore.Load(path,out warning);
+                    s.ThemeName = "Blue"; s.Pads[4].VelocityFloor = 50; SettingsStore.Save(s,path); var loaded = SettingsStore.Load(path,out warning);
+                    Check(loaded.ThemeName == "Blue", "Theme survives restart");
                     Check(loaded.Pads[4].VelocityFloor == 50 && warning == "", "Settings persistence");
                     s.Pads[4].Note = 80; SettingsStore.Save(s,path); loaded = SettingsStore.Load(path,out warning);
                     Check(loaded.Pads[4].Note == 80 && File.Exists(path + ".bak"),"Atomic replacement with backup");
@@ -72,6 +77,17 @@ namespace Pulse {
                     File.WriteAllText(wav,"bad WAV"); bool rejected = false; try { WaveFile.Load(wav); } catch (InvalidDataException) { rejected = true; } Check(rejected,"Reject malformed sample safely");
                 } finally { foreach (string file in Directory.GetFiles(folder)) File.Delete(file); Directory.Delete(folder); }
                 for (int i = 0; i < 8; i++) { var sample = AudioEngine.Synthesize(i); Check(sample.Length > 5000 && sample.All(v => !Single.IsNaN(v) && Math.Abs(v) < 1.5) && sample.Any(v => Math.Abs(v) > .1),"Synth pad " + i); }
+                using (var mixer = new AudioEngine()) {
+                    mixer.Volume = 1;
+                    var wave = Enumerable.Range(0,2048).Select(i => (float)(Math.Sin(i/2 * .03) * (i % 2 == 0 ? .5 : -.25))).ToArray();
+                    mixer.SetSample(0,wave); mixer.Hit(0,127); var output = new short[512];
+                    bool clean = true;
+                    for (int block = 0; block < 4; block++) { mixer.MixBlock(output); for (int i = 0; i < output.Length; i++) if (Math.Abs(output[i] - wave[block*512+i]*.65*32767) > 1.1) clean = false; }
+                    Check(clean,"Sample amplitude and stereo phase remain linear across buffer boundaries");
+                    mixer.MixBlock(output); Check(output.All(v => v == 0),"Finished sample becomes silence");
+                    mixer.SetSample(0,Enumerable.Repeat(1f,2048).ToArray()); for (int i = 0; i < 48; i++) mixer.Hit(0,127);
+                    mixer.MixBlock(output); Check(output.All(v => v > 0 && v <= 32112),"Overlapping loud hits cannot overflow or wrap PCM");
+                }
                 if (!args.Contains("--no-audio")) using (var audio = new AudioEngine()) { audio.Start(); Thread.Sleep(250); Check(audio.Error == "", "Native waveOut initialization: " + audio.Error); }
                 using (var midi = new Midi()) { Check(midi.Ensure("") == "MIDI off", "Optional MIDI without a loopback driver"); midi.Panic(); }
                 var library = SampleLibrary.Scan(Path.Combine(SettingsStore.Folder,"Samples","GSCW"));
