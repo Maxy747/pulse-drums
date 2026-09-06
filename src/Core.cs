@@ -15,7 +15,8 @@ namespace Pulse {
         public bool Muted { get; set; }
         public int RetriggerMs { get; set; }
         public int VelocityFloor { get; set; }
-        public Pad() { Hit = 40; Reset = 20; Gain = 1; Curve = 1; RetriggerMs = 25; VelocityFloor = 1; }
+        public int VelocityCeiling { get; set; }
+        public Pad() { Hit = 40; Reset = 20; Gain = 1; Curve = 1; RetriggerMs = 25; VelocityFloor = 1; VelocityCeiling = 127; }
         public Pad Copy() { return (Pad)MemberwiseClone(); }
     }
     public class Settings {
@@ -27,24 +28,56 @@ namespace Pulse {
         public string DeviceId { get; set; }
         public string MidiOutput { get; set; }
         public int Channel { get; set; }
+        public int[] Inputs { get; set; }
+        public int[] InstrumentNotes { get; set; }
+        public string[] SampleFiles { get; set; }
+        public bool ClassicView { get; set; }
+        public string SampleFolder { get; set; }
+        public bool SampleDefaultsApplied { get; set; }
+        public bool MidiEnabled { get; set; }
+        public int Transpose { get; set; }
+        public int NoteOffMs { get; set; }
         public Settings() {
-            Pads = Protocol.Notes.Select(n => new Pad { Note = n }).ToArray();
-            Volume = .7; Sound = true; MinimizeToTray = true; Port = ""; DeviceId = ""; MidiOutput = ""; Channel = 10;
+            Pads = Enumerable.Range(0,8).Select(i => new Pad { Note = Protocol.Notes[i], Hit = Kit.TriggerDefaults[i], Reset = Kit.ResetDefaults[i], Gain = 1, Curve = .6, VelocityFloor = 50, RetriggerMs = 0 }).ToArray();
+            Volume = .7; Sound = true; MinimizeToTray = true; Port = ""; DeviceId = ""; MidiOutput = ""; Channel = 1; MidiEnabled = true; NoteOffMs = 10;
         }
-        public Settings Copy() { var s = (Settings)MemberwiseClone(); s.Pads = Pads.Select(p => p.Copy()).ToArray(); return s; }
+        public Settings Copy() { var s = (Settings)MemberwiseClone(); s.Pads = Pads.Select(p => p.Copy()).ToArray(); s.Inputs = Inputs == null ? null : (int[])Inputs.Clone(); s.InstrumentNotes = InstrumentNotes == null ? null : (int[])InstrumentNotes.Clone(); s.SampleFiles = SampleFiles == null ? null : (string[])SampleFiles.Clone(); return s; }
         public void Normalize() {
             if (Pads == null || Pads.Length != 8) Pads = new Settings().Pads;
             for (int i = 0; i < 8; i++) {
-                if (Pads[i] == null) Pads[i] = new Pad { Note = Protocol.Notes[i] };
+                if (Pads[i] == null) Pads[i] = new Settings().Pads[i];
                 var p = Pads[i]; p.Hit = Math.Max(2, Math.Min(1022, p.Hit)); p.Reset = Math.Max(1, Math.Min(p.Hit - 1, p.Reset));
                 p.Note = Math.Max(0, Math.Min(127, p.Note)); p.Gain = Clamp(p.Gain, .25, 3); p.Curve = Clamp(p.Curve, .4, 2.5);
                 p.RetriggerMs = Math.Max(0, Math.Min(150, p.RetriggerMs));
-                p.VelocityFloor = Math.Max(1, Math.Min(127, p.VelocityFloor));
+                p.VelocityCeiling = Math.Max(1, Math.Min(127, p.VelocityCeiling));
+                p.VelocityFloor = Math.Max(1, Math.Min(p.VelocityCeiling, p.VelocityFloor));
             }
             Volume = Clamp(Volume, 0, 1); Channel = Math.Max(1, Math.Min(16, Channel));
             Port = Port ?? ""; DeviceId = DeviceId ?? ""; MidiOutput = MidiOutput ?? "";
+            if (Inputs == null || Inputs.Length != 8 || Inputs.Distinct().Count() != 8 || Inputs.Any(i => i < 0 || i > 7)) Inputs = (int[])Kit.DefaultInputs.Clone();
+            if (InstrumentNotes == null || InstrumentNotes.Length != 8) InstrumentNotes = Inputs.Select(i => Pads[i].Note).ToArray();
+            for (int i = 0; i < 8; i++) InstrumentNotes[i] = Math.Max(0, Math.Min(127, InstrumentNotes[i]));
+            if (SampleFiles == null || SampleFiles.Length != 8) SampleFiles = new string[8];
+            for (int i = 0; i < 8; i++) SampleFiles[i] = SampleFiles[i] ?? "";
+            SampleFolder = SampleFolder ?? Path.Combine(SettingsStore.Folder, "Samples", "GSCW");
+            Transpose = Math.Max(-48,Math.Min(48,Transpose)); NoteOffMs = Math.Max(1,Math.Min(500,NoteOffMs));
         }
+        public int PartForInput(int input) { return Array.IndexOf(Inputs, input); }
         static double Clamp(double v, double min, double max) { return Double.IsNaN(v) || Double.IsInfinity(v) ? min : Math.Max(min, Math.Min(max, v)); }
+    }
+    public static class Kit {
+        public static readonly string[] Names = {"Hi-hat", "Crash", "Low tom", "Snare", "Mid tom", "Bass / Kick", "Floor tom", "Ride"};
+        public static readonly int[] DefaultInputs = {2,6,4,1,3,0,5,7};
+        public static readonly int[] Notes = {42,49,45,38,48,36,41,51};
+        public static readonly int[] TriggerDefaults = {140,20,20,20,10,60,10,10};
+        public static readonly int[] ResetDefaults = {40,5,10,5,1,1,5,9};
+        // Swap the displaced assignment rather than silently binding two parts to one sensor.
+        public static int[] Assign(int[] original, int part, int input) {
+            if (part < 0 || part > 7 || input < 0 || input > 7) throw new ArgumentOutOfRangeException();
+            int[] result = (int[])original.Clone(); int previous = Array.IndexOf(result, input);
+            if (previous < 0) throw new ArgumentException("Input map must be a permutation");
+            result[previous] = result[part]; result[part] = input; return result;
+        }
     }
     public static class SettingsStore {
         public static readonly string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PulseDrums");
@@ -78,7 +111,7 @@ namespace Pulse {
             if (p[0] == "RAW" && a >= 0 && a < 8 && b >= 0 && b <= 1023) { frame = new Frame("RAW", a, b); return true; }
             return false;
         }
-        public static int Velocity(int input, Pad p) { return Math.Max(p.VelocityFloor, Math.Min(127, (int)Math.Round(Math.Pow(input / 127.0, p.Curve) * p.Gain * 127))); }
+        public static int Velocity(int input, Pad p) { return Math.Max(p.VelocityFloor, Math.Min(p.VelocityCeiling, (int)Math.Round(Math.Pow(input / 127.0, p.Curve) * p.Gain * 127))); }
         public static string[] Thresholds(Settings s) {
             var lines = new List<string>();
             for (int i = 0; i < 8; i++) { lines.Add("SET,RESET," + i + "," + s.Pads[i].Reset + "\n"); lines.Add("SET,HIT," + i + "," + s.Pads[i].Hit + "\n"); }

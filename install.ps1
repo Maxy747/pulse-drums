@@ -1,8 +1,9 @@
-param([switch]$NoStartup, [switch]$NoLaunch, [switch]$ImportCurrentKit)
+param([switch]$NoStartup, [switch]$NoLaunch, [switch]$ImportCurrentKit, [switch]$WithoutSamples)
 $ErrorActionPreference = 'Stop'
 $source = Join-Path $PSScriptRoot 'Pulse.exe'
 if (!(Test-Path -LiteralPath $source)) { $source = Join-Path $PSScriptRoot 'bin\Pulse.exe' }
 if (!(Test-Path -LiteralPath $source)) { throw 'Build first with .\build.ps1, or use the release zip.' }
+if (!$WithoutSamples) { & (Join-Path $PSScriptRoot 'download-samples.ps1') }
 $installFolder = Join-Path $env:LOCALAPPDATA 'Programs\Pulse'
 $exePath = Join-Path $installFolder 'Pulse.exe'
 New-Item -ItemType Directory -Force -Path $installFolder | Out-Null

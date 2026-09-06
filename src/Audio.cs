@@ -22,7 +22,7 @@ namespace Pulse {
         readonly float[][] samples = new float[8][];
         readonly IntPtr[] headers = new IntPtr[Buffers], data = new IntPtr[Buffers];
         readonly bool[] prepared = new bool[Buffers];
-        readonly short[] pcm = new short[Block];
+        readonly short[] pcm = new short[Block * 2];
         readonly AutoResetEvent signal = new AutoResetEvent(false);
         readonly uint headerSize = (uint)Marshal.SizeOf(typeof(Header));
         IntPtr device;
@@ -30,7 +30,8 @@ namespace Pulse {
         volatile bool stop;
         public volatile string Error = "";
         public float Volume = .7f;
-        public AudioEngine() { for (int i = 0; i < 8; i++) samples[i] = Synthesize(i); }
+        public AudioEngine() { for (int i = 0; i < 8; i++) samples[i] = WaveFile.Stereo(Synthesize(Kit.DefaultInputs[i])); }
+        public void SetSample(int part, float[] sample) { lock (gate) samples[part] = sample; }
         public static float[] Synthesize(int pad) {
             double length = pad == 6 ? 1.5 : pad == 7 ? 1.1 : pad == 2 ? .16 : .65;
             var sample = new float[(int)(length * Rate)]; var random = new Random(101 + pad);
@@ -49,13 +50,13 @@ namespace Pulse {
         }
         public void Start() {
             try {
-                var f = new Format { Tag = 1, Channels = 1, Rate = Rate, BytesPerSecond = Rate * 2, Align = 2, Bits = 16 };
+                var f = new Format { Tag = 1, Channels = 2, Rate = Rate, BytesPerSecond = Rate * 4, Align = 4, Bits = 16 };
                 uint error = waveOutOpen(out device, UInt32.MaxValue, ref f, signal.SafeWaitHandle.DangerousGetHandle(), IntPtr.Zero, 0x50000);
                 if (error != 0) throw new InvalidOperationException("Audio device unavailable (" + error + ")");
                 for (int i = 0; i < Buffers; i++) {
-                    data[i] = Marshal.AllocHGlobal(Block * 2); headers[i] = Marshal.AllocHGlobal((int)headerSize);
-                    Marshal.Copy(pcm, 0, data[i], Block);
-                    Marshal.StructureToPtr(new Header { Data = data[i], Length = Block * 2 }, headers[i], false);
+                    data[i] = Marshal.AllocHGlobal(Block * 4); headers[i] = Marshal.AllocHGlobal((int)headerSize);
+                    Marshal.Copy(pcm, 0, data[i], pcm.Length);
+                    Marshal.StructureToPtr(new Header { Data = data[i], Length = Block * 4 }, headers[i], false);
                     if (waveOutPrepareHeader(device, headers[i], headerSize) != 0) throw new InvalidOperationException("Audio buffer setup failed");
                     prepared[i] = true;
                     if (waveOutWrite(device, headers[i], headerSize) != 0) throw new InvalidOperationException("Audio playback failed");
@@ -73,7 +74,7 @@ namespace Pulse {
                         Header h = (Header)Marshal.PtrToStructure(headers[b], typeof(Header));
                         if ((h.Flags & 1) == 0) continue;
                         lock (gate) {
-                            for (int i = 0; i < Block; i++) {
+                            for (int i = 0; i < pcm.Length; i++) {
                                 double value = 0;
                                 foreach (var v in voices) if (v.Position < v.Sample.Length) value += v.Sample[v.Position++] * v.Gain;
                                 // Smooth saturation keeps simultaneous hits below digital full scale.
@@ -81,7 +82,7 @@ namespace Pulse {
                             }
                             voices.RemoveAll(v => v.Position >= v.Sample.Length);
                         }
-                        Marshal.Copy(pcm, 0, data[b], Block);
+                        Marshal.Copy(pcm, 0, data[b], pcm.Length);
                         if (waveOutWrite(device, headers[b], headerSize) != 0) throw new InvalidOperationException("Audio device stopped. Restart Pulse after changing audio devices.");
                     }
                 }

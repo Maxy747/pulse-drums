@@ -1,72 +1,105 @@
-# Pulse
+# Pulse 2
 
-A small native Windows app for Arduino piezo drums. Plug in your kit, hit a pad, and play. No Connect or Apply buttons.
+Native Windows control for an Arduino piezo drum kit: automatic USB connection, a playable top-down kit, pad learning, stereo samples and MIDI.
 
-![Pulse desktop interface](artifacts/pulse-preview.png)
+![Top-down kit with a snare hit](artifacts/pulse-kit-hit.png)
 
-## Use it
+## Install
 
-Download **Pulse-Windows-x64.zip** from Releases. Run `Pulse.exe` directly, or run `install.ps1` in PowerShell for a per-user installation and a Start menu shortcut. The installer enables launch at Windows sign-in; you can turn that off inside Pulse or install with `-NoStartup`. No administrator access is required.
+Download **Pulse-Windows-x64.zip** from [Releases](https://github.com/Maxy747/pulse-drums/releases). Extract it and run `install.ps1` in PowerShell. This creates a Start menu shortcut, enables launch at Windows sign-in, and downloads the GSCW sample library if it is missing. No administrator access is needed. Use `-NoStartup` to skip sign-in launch or `-WithoutSamples` to install only the synth/MIDI app. `Pulse.exe` can also run directly; run `download-samples.ps1` once for the sample library.
 
-Requires 64-bit Windows 10/11 with .NET Framework 4.8 and the USB driver for your board. The executable uses Windows' framework and audio APIs; its small file size does not include Windows components. There is no browser runtime, Python installation, account, or network connection involved in playing.
+Requires Windows 10/11 x64, .NET Framework 4.8, a Windows audio output and your board's USB driver. The app has no Python/browser dependency. Samples take roughly 301 MB and remain in `%LOCALAPPDATA%\PulseDrums\Samples\GSCW` across app updates. Internet access is needed for the initial download, not for playing.
 
-1. Close Arduino Serial Monitor and the old drum bridge so the USB port is free.
-2. Open Pulse and plug in the Nano. It scans automatically, including after unplug/replug.
-3. Hit a pad to verify the firmware's data. Saved thresholds are then sent automatically.
-4. Click a pad to tune it. Keys **1–8**, a double-click, or **Audition** play a test hit. Test hits are separate from the real session count.
+## Play
 
-For immediate standalone sound, enable **Drum sounds**. Pulse includes eight synthesized percussion voices. For Ableton or another DAW, choose an existing MIDI output; that selection is remembered and reopened automatically. An existing virtual MIDI cable such as your `Nano Drums 1` port is still needed for routing between Windows applications. Pulse does not install a virtual MIDI driver. Disable built-in sounds if the DAW already produces audio.
+Close Arduino Serial Monitor and the old drum bridge to free the port. Open Pulse, plug in the Nano, and hit a pad once to verify the serial protocol. Saved thresholds are sent automatically. No Connect, Apply or Save-settings button is needed.
 
-Closing the window keeps the bridge running when **Keep playing in tray** is enabled. Use the tray menu's **Exit** to stop it. Starting Pulse a second time brings the existing instance forward. **Launch with Windows** starts it in the tray at sign-in.
+The default view follows the numbered physical kit. Pieces glow green on a hit, independently and simultaneously. Click a piece to tune it; double-click, press **1–8**, or use **Audition** to test its sound. **Classic controls** switches to the previous pad-card view. This view choice is remembered.
 
-## Controls
+| Number | Instrument | Initial input | Default MIDI note |
+| --- | --- | --- | ---: |
+| 1 | Hi-hat | A2 | 42 |
+| 2 | Crash | A6 | 49 |
+| 3 | Low tom | A4 | 45 |
+| 4 | Snare | A1 | 38 |
+| 5 | Mid tom | A3 | 48 |
+| 6 | Bass / Kick | A0 | 36 |
+| 7 | Floor tom | A5 | 41 |
+| 8 | Ride | A7 | 51 |
 
-- Per-pad trigger and re-arm thresholds, sent to the Arduino.
-- Per-pad velocity gain, floor, response curve, retrigger guard, mute, and MIDI note mapping, processed on the PC.
-- Master sound volume, sound toggle, MIDI output, and kit MIDI channel.
-- Eight decaying velocity meters with last measured raw ADC peak, and a real hit counter.
-- Automatic saving, USB reconnect, saved MIDI output reconnect, and device diagnostics.
+The numbers describe physical positions, **not wiring**. If inputs are swapped, learn them:
 
-Trigger threshold is restricted to **2–1022**, and re-arm to **1–(trigger−1)**. This avoids a zero re-arm threshold (the original sketch can never re-arm below zero) and a trigger of 1023 (which would divide by zero in the sketch's velocity mapping). Lower trigger values increase sensitivity. A curve below 1 makes soft hits louder. The retrigger guard suppresses repeat hits on the PC; it is not firmware crosstalk cancellation.
+1. Choose **Set up my kit** for all eight pieces, or select a piece and choose **Assign input**.
+2. Strike only the requested instrument. Pulse picks the largest raw peak in a 160 ms capture window, after a short settling period.
+3. Review the proposed input. Choose **Use this input**, or **Listen again** if it detected the wrong pad.
+4. Full setup saves after all eight confirmations. Cancel discards the draft. One-piece assignment swaps the displaced input so two pieces cannot accidentally share one sensor.
 
-Settings live in `%LOCALAPPDATA%\PulseDrums\settings.xml`, with the previous save kept as `.bak`. Device logs are bounded and saved alongside it. **Reset** restores the selected pad to general defaults, not to a hardware calibration.
+Sounds are paused during setup. Learning uses real serial sensor peaks, not mouse/keyboard auditions. The same assignment controls the kit glow, sample and MIDI note. Trigger calibration remains attached to each physical Arduino input. A sensor must exceed its current firmware threshold to be detected; adjust the threshold if a pad never registers.
 
-## Existing kit profile
+## Sounds and Ableton
 
-`profiles/current-kit.xml` transcribes the supplied Nano Drum MIDI screenshot:
+The first sample-enabled run loads **GSCW Kit 2** and selects direct playback. Pick **GSCW Kit 1**, **GSCW Kit 2**, or **Pulse synth** in the bottom selector and choose **Apply sounds** to change the whole kit.
 
-| Pad | Trigger | Re-arm | MIDI note |
-| --- | ---: | ---: | ---: |
-| Kick | 140 | 40 | 36 |
-| Snare | 20 | 5 | 38 |
-| Hi-hat | 20 | 10 | 42 |
-| Tom 1 | 20 | 5 | 48 |
-| Tom 2 | 10 | 1 | 45 |
-| Floor tom | 60 | 1 | 41 |
-| Crash | 10 | 5 | 49 |
-| Ride | 10 | 9 | 51 |
+The selected drum's **Sound** picker lists relevant samples. Enable **All sounds** to choose any of the 360 WAVs, or use **Load WAV…** for your own file. **Sample folder…** points Pulse at a different downloaded library. Sample loading happens off the hit-processing thread; failed loads retain the previous sound and show a message.
 
-All pads use velocity floor **50**, gain **1**, curve **0.6**, and no additional retrigger guard. The MIDI channel is **1**, with output **Nano Drums** and built-in sounds off. The old app displayed this output as **Nano Drums 1**; Windows' native MIDI API exposes it as **Nano Drums**, which was verified on this PC. MIDI notes are released after 10 ms. Install using `install.ps1 -ImportCurrentKit` to seed these values only if no Pulse settings already exist. The general app defaults remain suitable for a fresh kit.
+Output choices:
 
-## Firmware compatibility
+- **Samples** plays directly through the default Windows audio output.
+- **Ableton / MIDI only** sends notes to the selected MIDI output without direct audio.
+- **Samples + MIDI** enables both.
 
-Designed against the serial interface in [marwans200/Arduino-Drums](https://github.com/marwans200/Arduino-Drums), specifically [Durms.ino](https://github.com/marwans200/Arduino-Drums/blob/main/Durms.ino). This is an independent app implementation; the upstream executable and Python source are not bundled.
+For Ableton, choose your existing loopMIDI output, then enable that input in Ableton and arm the instrument track. On this PC Windows calls the port **Nano Drums**, whereas the old Python UI displayed **Nano Drums 1**. Pulse remembers the output and retries when it becomes available. It does not install a virtual MIDI driver.
 
-Serial: **115200 baud, 8-N-1**. Each hit must send a `NOTE,note,velocity` line followed by `RAW,pad,peak` within 250 ms. Pads are indexed 0–7. Mapping uses the RAW pad index, so changed incoming note numbers are supported. Pulse writes complete `SET,RESET,pad,value` and `SET,HIT,pad,value` lines, paced 25 ms apart.
+WAV playback supports mono/stereo PCM 8/16/24/32-bit and float32, with sample-rate conversion in memory to 48 kHz stereo. Original files are not rewritten. One-shots are limited to 60 seconds/128 MB. GSCW Kit 1 has no separate 12-inch tom, so its Low tom and Floor tom defaults share a 13-inch sound; Kit 2 has distinct 10/12/13-inch choices. See [sample source and license notes](THIRD-PARTY.md).
 
-The original sketch has no identification query, settings acknowledgment, heartbeat, or EEPROM persistence. Pulse opens likely Arduino USB adapters (Arduino, CH340, FTDI, CP210x), waits for valid NOTE/RAW data before writing settings, and remembers the verified USB identity. These adapter identifiers are shared by other devices, so **Auto-detect is a candidate search, not unique hardware identification**. With several candidates it cycles every eight seconds until a hit verifies one; select a port once if needed. Opening a serial port may reset a Nano. Allow roughly two seconds for boot, and hit a pad once for verification. Pulse can detect unplugging, but cannot distinguish an idle kit from stalled firmware while the port remains open.
+## Your defaults and saved presets
 
-No firmware is flashed. A NOTE-only or binary-MIDI sketch requires adaptation. The reference sketch also has a blocking 10 ms peak scan per pad; desktop software cannot remove that acquisition latency. Pulse's four 256-frame audio buffers at 48 kHz account for about 21 ms of queued audio, plus Windows and hardware latency. End-to-end latency is not claimed to be measured or zero.
+The supplied calibration is now the factory default:
 
-## Build and verify
+| Input | Trigger | Re-arm |
+| --- | ---: | ---: |
+| A0 | 140 | 40 |
+| A1 | 20 | 5 |
+| A2 | 20 | 10 |
+| A3 | 20 | 5 |
+| A4 | 10 | 1 |
+| A5 | 60 | 1 |
+| A6 | 10 | 5 |
+| A7 | 10 | 9 |
+
+Velocity floor **50**, ceiling **127**, gain **1**, curve **0.6**, MIDI channel **1**, transpose **0**, and note length **10 ms**. The extra PC retrigger guard defaults to **0 ms**. Open **More MIDI controls** for velocity ceiling, transpose and note length.
+
+**Save preset** creates a named `.pulse.xml` file. **Load preset** restores input assignments, calibration, sound selections, notes, volume, output mode, channel, transpose and note length. Device identity, the local sample folder and this PC's MIDI-port selection are retained. Missing sample paths are matched by unique filenames in the local library when possible. Otherwise the UI reports the missing sound.
+
+**Your defaults** restores the supplied calibration and default musical MIDI values, keeping input assignments and samples. **Reset** restores only the selected input's calibration and that instrument's default MIDI note. Normal edits auto-save to `%LOCALAPPDATA%\PulseDrums\settings.xml`, with a `.bak` copy of the previous save. Existing saved settings are kept during upgrades.
+
+Trigger values are constrained to 2–1022 and re-arm values to 1–(trigger−1), avoiding invalid edge cases in the reference firmware. Response curves below 1 make softer hits louder. The retrigger guard suppresses rapid repeated hits on the PC; it does not alter firmware crosstalk behavior.
+
+## Background operation
+
+When **Keep playing in tray** is enabled, closing the window keeps the kit active. Use the tray icon's **Exit** to stop it. **Launch with Windows** starts Pulse in the tray. Opening it again brings the existing instance forward. **Silence all** stops active sample voices and MIDI notes.
+
+Diagnostics include USB state, sample load errors and MIDI availability. The bounded device log is saved in `%LOCALAPPDATA%\PulseDrums\device.log`.
+
+## Arduino compatibility and limits
+
+Based on the serial interface in [Durms.ino](https://github.com/marwans200/Arduino-Drums/blob/main/Durms.ino): **115200 baud, 8-N-1**, with `NOTE,note,velocity` followed by `RAW,pad,peak` within 250 ms. Raw input indexes are 0–7. Changed incoming note numbers are supported because identity comes from RAW. Assigned instrument notes are used for MIDI output.
+
+Pulse sends `SET,RESET,pad,value` and `SET,HIT,pad,value`, paced 25 ms apart. The firmware is not flashed. It has no identification handshake, settings acknowledgment, heartbeat or EEPROM persistence. Pulse opens likely Arduino USB adapters and verifies the NOTE/RAW pair before restoring settings. Opening a Nano's port may reset it; allow about two seconds for boot and strike one pad to verify it. An idle kit cannot be distinguished from stalled firmware while its port stays open.
+
+Arduino/CH340/FTDI/CP210x identifiers are candidate hints, not unique drum-kit IDs. With multiple candidates, Pulse cycles every eight seconds until one is verified. A port can also be selected once and remembered.
+
+The reference sketch's blocking 10 ms peak scan remains unchanged. Four 256-frame audio buffers at 48 kHz represent about 21 ms of queued audio, plus Windows and hardware latency. End-to-end latency has not been measured. If the Windows audio device is removed or changed and playback stops, restart Pulse.
+
+## Build and test
 
 ```powershell
 .\build.ps1 -Test
 .\bin\Pulse.exe --smoke
 ```
 
-Builds with the .NET Framework C# compiler already included in Windows; no NuGet downloads. `make-icon.ps1` regenerates the original app icon. `--smoke` renders the actual WPF UI to `artifacts/`, exercises the controls, and does not open a serial port or change user settings. Tests cover malformed/fragmented input, threshold safety, persistence, velocity processing, synth generation, and native audio initialization. Audio initialization requires a working Windows output device.
+Uses the .NET Framework compiler shipped with Windows, without NuGet dependencies. The local test suite checks protocol parsing, mapping, learning, presets, safe calibration, WAV decoding, stereo/resampling and audio initialization. When the GSCW library is present, every downloaded sample is decoded. CI uses `-NoAudio` because hosted runners lack audio hardware.
 
-Hardware checks still require the physical kit: hit all eight pads, change a threshold, unplug/replug, and verify your DAW's MIDI reception. Desktop tests alone cannot prove the installed sketch accepts settings, or that your DAW is receiving audio/MIDI.
+The WPF smoke test renders kit/classic/hit/setup screenshots and exercises assignment, cancel, reset, preset restore and control changes without opening a serial port or writing user settings. Actual pad identification and audible DAW reception require hands-on testing.
 
-Installed files: `%LOCALAPPDATA%\Programs\Pulse`. To uninstall, exit Pulse, disable **Launch with Windows**, remove the installation folder and the Pulse Start menu shortcut. Keep or remove `%LOCALAPPDATA%\PulseDrums` depending on whether you want to retain settings.
+Installed app: `%LOCALAPPDATA%\Programs\Pulse`. To remove it, exit the tray app, disable sign-in launch, and remove that folder and its Start menu shortcut. Settings, presets and samples can be retained or removed separately from `%LOCALAPPDATA%\PulseDrums`.

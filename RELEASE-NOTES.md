@@ -1,14 +1,14 @@
-Pulse 1.0.0 — native Windows control for Arduino piezo drums.
+Pulse 2.0 — your physical kit, on screen.
 
-- Automatic USB discovery and reconnect; no Connect button.
-- Saved pad thresholds restored after valid drum data arrives.
-- Eight pad meters, velocity controls, mute, note mapping, and MIDI channel.
-- Built-in synthesized percussion and optional routing to an existing MIDI output.
-- Tray mode, Windows sign-in launch, and automatic saving.
-- Includes the current kit profile transcribed from the supplied settings screenshot.
+- Top-down kit in your numbered arrangement, with independent green hit glows. Classic controls remain switchable.
+- Assign one input or all eight by playing the physical pads. Review each detection; cancel preserves previous assignments.
+- The learned map drives the diagram, samples and MIDI together, while sensor thresholds stay with their inputs.
+- Native stereo WAV playback, two GSCW kit presets, per-piece sound selection, custom WAV loading and a synth fallback.
+- All 360 GSCW samples downloaded and decoded locally. Samples are fetched directly from their source by the installer and stored separately from app updates.
+- Direct samples, Ableton/MIDI, or both as the output mode.
+- The supplied calibration is the factory default. Named presets save assignments, tuning, sounds and musical MIDI settings.
+- Configurable velocity ceiling, transpose and note length, with USB reconnect and tray/startup behavior retained.
 
-Download the ZIP and run Pulse.exe. Run install.ps1 for Start menu installation and sign-in launch. Use `install.ps1 -ImportCurrentKit` for the included calibrated profile. The app requires Windows 10/11 x64, .NET Framework 4.8, and the board's USB driver.
+Extract the ZIP and run install.ps1. It keeps existing settings and downloads the sample library only if missing. Use -WithoutSamples for the synth/MIDI app alone. See THIRD-PARTY.md for sample source/license notes.
 
-Validated locally with 42 automated assertions, rendered WPF control checks, native audio initialization, and actual NOTE/RAW drum data on COM5. Threshold transmission was observed; the reference sketch has no acknowledgment. End-to-end latency, every physical pad, unplug/replug, and DAW reception still need hands-on testing.
-
-Firmware is not changed. The first pad hit identifies the serial protocol after connection. See README for compatibility and multi-device limitations.
+Validated locally with automated checks, all 360 WAV decodes and rendered WPF interaction tests. Physical pad learning and audible DAW reception still require hands-on testing.

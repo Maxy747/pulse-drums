@@ -27,14 +27,14 @@ namespace Pulse {
                 selected = name; return "MIDI → " + name;
             }
         }
-        public void Hit(int note, int velocity, int channel, long now) {
+        public void Hit(int note, int velocity, int channel, long now, int noteOffMs = 10) {
             lock (gate) {
                 if (handle == IntPtr.Zero) return;
                 int ch = channel - 1, key = (ch << 8) | note;
                 if (noteOffs.ContainsKey(key)) midiOutShortMsg(handle, (uint)(0x80 | ch | (note << 8)));
                 uint result = midiOutShortMsg(handle, (uint)(0x90 | ch | (note << 8) | (velocity << 16)));
                 if (result != 0) { Close(); return; }
-                noteOffs[key] = now + 10;
+                noteOffs[key] = now + noteOffMs;
             }
         }
         public void Tick(long now) {

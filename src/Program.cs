@@ -35,7 +35,7 @@ namespace Pulse {
             }
         }
     }
-    public sealed class Controller {
+    public sealed partial class Controller {
         public Window Window;
         Settings settings;
         volatile Settings live;
@@ -66,10 +66,11 @@ namespace Pulse {
         string savePath;
         public Controller(bool isSmoke, bool startHidden) {
             smoke = isSmoke; background = startHidden;
-            string warning = ""; settings = smoke ? new Settings() : SettingsStore.Load(SettingsStore.PathName, out warning); live = settings.Copy(); savePath = SettingsStore.PathName;
+            string warning = ""; settings = smoke ? new Settings() : SettingsStore.Load(SettingsStore.PathName, out warning); settings.Normalize(); live = settings.Copy(); savePath = SettingsStore.PathName;
             using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Pulse.Main.xaml")) Window = (Window)XamlReader.Load(stream);
+            Window.Height = Math.Min(Window.Height,SystemParameters.WorkArea.Height - 24);
             Window.SourceInitialized += delegate { int dark = 1; try { DwmSetWindowAttribute(new WindowInteropHelper(Window).Handle, 20, ref dark, 4); } catch { } };
-            MakePads(); BindControls(); SelectPad(0);
+            MakePads(); BindControls(); BuildKitControls(); SelectPad(0);
             if (warning != "") logs.Enqueue(warning);
             Window.Loaded += delegate {
                 if (smoke) {
@@ -77,12 +78,13 @@ namespace Pulse {
                     t.Tick += delegate { t.Stop(); Smoke(); }; t.Start(); return;
                 }
                 audio = new AudioEngine(); audio.Volume = (float)settings.Volume; audio.Start();
+                StartSampleLibrary();
                 connection = new DrumConnection(settings);
                 connection.Status += (message, verified) => { connectionText = message; ready = verified; };
                 connection.PortsChanged += p => discovered = p;
                 connection.Identified += id => identified = id;
                 connection.Log += message => logs.Enqueue(message);
-                connection.Received += f => { if (f.Kind == "HIT") Hit(f.Index, f.Value, false); else Enqueue(f); };
+                connection.Received += ReceiveInput;
                 connection.Start();
                 midiTimer = new System.Threading.Timer(_ => midi.Tick(clock.ElapsedMilliseconds), null, 0, 5);
                 MakeTray();
@@ -111,15 +113,15 @@ namespace Pulse {
                 var card = new Border { Background = Brush("#1B1F19"), CornerRadius = new CornerRadius(10), BorderBrush = Brush("#30372B"), BorderThickness = new Thickness(1), Padding = new Thickness(14), Margin = new Thickness(5,0,5,10), Height = 134 };
                 var contents = new Grid();
                 contents.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); contents.RowDefinitions.Add(new RowDefinition()); contents.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                var top = new Grid(); top.Children.Add(Text("A" + i, 10, "#88937F")); var key = Text((i+1).ToString(), 10, "#849576"); key.HorizontalAlignment = HorizontalAlignment.Right; top.Children.Add(key); contents.Children.Add(top);
-                var center = new StackPanel { VerticalAlignment = VerticalAlignment.Center }; center.Children.Add(Text(Protocol.Names[i], 17, "#E7ECDF"));
-                padNotes[i] = Text("NOTE " + settings.Pads[i].Note, 9, "#929C89"); padNotes[i].Margin = new Thickness(0,5,0,0); center.Children.Add(padNotes[i]); Grid.SetRow(center,1); contents.Children.Add(center);
+                var top = new Grid(); top.Children.Add(Text("PIECE " + (i+1), 10, "#88937F")); var key = Text((i+1).ToString(), 10, "#849576"); key.HorizontalAlignment = HorizontalAlignment.Right; top.Children.Add(key); contents.Children.Add(top);
+                var center = new StackPanel { VerticalAlignment = VerticalAlignment.Center }; center.Children.Add(Text(Kit.Names[i], 17, "#E7ECDF"));
+                padNotes[i] = Text("NOTE " + settings.InstrumentNotes[i], 9, "#929C89"); padNotes[i].Margin = new Thickness(0,5,0,0); center.Children.Add(padNotes[i]); Grid.SetRow(center,1); contents.Children.Add(center);
                 var bottom = new StackPanel(); rawLabels[i] = Text("PEAK  —", 9, "#77846E"); rawLabels[i].Margin = new Thickness(0,0,0,6); bottom.Children.Add(rawLabels[i]);
                 var track = new Border { Background = Brush("#30392A"), Height = 4, CornerRadius = new CornerRadius(2), ClipToBounds = true };
                 meterFills[i] = new Border { Background = Brush("#C5F36B"), HorizontalAlignment = HorizontalAlignment.Left, Width = 0, CornerRadius = new CornerRadius(2) }; track.Child = meterFills[i]; bottom.Children.Add(track); Grid.SetRow(bottom,2); contents.Children.Add(bottom);
                 card.Child = contents; padCards[i] = card;
-                var button = new Button { Content = card, Padding = new Thickness(0), BorderThickness = new Thickness(0), Background = Brushes.Transparent, HorizontalContentAlignment = HorizontalAlignment.Stretch, ToolTip = "Tune " + Protocol.Names[i] + ". Double-click to audition." };
-                System.Windows.Automation.AutomationProperties.SetName(button, Protocol.Names[i] + " pad settings");
+                var button = new Button { Content = card, Padding = new Thickness(0), BorderThickness = new Thickness(0), Background = Brushes.Transparent, HorizontalContentAlignment = HorizontalAlignment.Stretch, ToolTip = "Tune " + Kit.Names[i] + ". Double-click to audition." };
+                System.Windows.Automation.AutomationProperties.SetName(button, Kit.Names[i] + " pad settings");
                 button.Click += delegate { SelectPad(index); };
                 button.MouseDoubleClick += delegate { Hit(index, 100, true); };
                 grid.Children.Add(button);
@@ -136,12 +138,12 @@ namespace Pulse {
             Get<ComboBox>("PortCombo").Items.Add(new PortInfo { Name = "", Label = "Auto-detect Arduino", Id = "" }); Get<ComboBox>("PortCombo").SelectedIndex = 0;
             try { using (var key = Registry.CurrentUser.OpenSubKey("Software\\Microsoft\\Windows\\CurrentVersion\\Run")) Get<CheckBox>("StartupToggle").IsChecked = key != null && key.GetValue("PulseDrums") != null; } catch { }
             updating = false;
-            foreach (string name in new[] {"Threshold", "Reset", "Gain", "Floor", "Curve", "Guard"}) Get<Slider>(name + "Slider").ValueChanged += delegate { if (!updating) PadChanged(); };
+            foreach (string name in new[] {"Threshold", "Reset", "Gain", "Floor", "Ceiling", "Curve", "Guard"}) Get<Slider>(name + "Slider").ValueChanged += delegate { if (!updating) PadChanged(); };
             Get<Slider>("VolumeSlider").ValueChanged += delegate { if (updating) return; settings.Volume = Get<Slider>("VolumeSlider").Value / 100; Get<TextBlock>("VolumeValue").Text = Math.Round(settings.Volume * 100) + "%"; Changed(false); };
             Get<CheckBox>("SoundToggle").Click += delegate { settings.Sound = Get<CheckBox>("SoundToggle").IsChecked == true; if (!settings.Sound && audio != null) audio.Panic(); Changed(false); };
             Get<CheckBox>("TrayToggle").Click += delegate { settings.MinimizeToTray = Get<CheckBox>("TrayToggle").IsChecked == true; Changed(false); };
-            Get<CheckBox>("MuteToggle").Click += delegate { settings.Pads[selected].Muted = Get<CheckBox>("MuteToggle").IsChecked == true; if (settings.Pads[selected].Muted) { midi.Panic(); if (audio != null) audio.Panic(); } Changed(false); SelectPad(selected); };
-            Get<ComboBox>("NoteCombo").SelectionChanged += delegate { if (updating) return; settings.Pads[selected].Note = (int)Get<ComboBox>("NoteCombo").SelectedItem; Changed(false); RefreshValues(); };
+            Get<CheckBox>("MuteToggle").Click += delegate { SelectedPad.Muted = Get<CheckBox>("MuteToggle").IsChecked == true; if (SelectedPad.Muted) { midi.Panic(); if (audio != null) audio.Panic(); } Changed(false); SelectPad(selected); };
+            Get<ComboBox>("NoteCombo").SelectionChanged += delegate { if (updating) return; settings.InstrumentNotes[selected] = (int)Get<ComboBox>("NoteCombo").SelectedItem; Changed(false); RefreshValues(); };
             Get<ComboBox>("ChannelCombo").SelectionChanged += delegate { if (updating) return; settings.Channel = (int)Get<ComboBox>("ChannelCombo").SelectedItem; midi.Panic(); Changed(false); };
             Get<ComboBox>("PortCombo").SelectionChanged += delegate { if (updating) return; var p = Get<ComboBox>("PortCombo").SelectedItem as PortInfo; if (p == null) return; settings.Port = p.Name; Changed(false); };
             Get<ComboBox>("MidiCombo").SelectionChanged += delegate { if (updating) return; var cb = Get<ComboBox>("MidiCombo"); settings.MidiOutput = cb.SelectedIndex <= 0 ? "" : Convert.ToString(cb.SelectedItem); midi.Panic(); lastMidiScan = -10000; Changed(false); };
@@ -155,34 +157,38 @@ namespace Pulse {
                 } catch (Exception e) { Get<CheckBox>("StartupToggle").IsChecked = false; logs.Enqueue("Could not change startup: " + e.Message); }
             };
             Get<Button>("TestPad").Click += delegate { Hit(selected,100,true); };
-            Get<Button>("ResetPad").Click += delegate { settings.Pads[selected] = new Pad { Note = Protocol.Notes[selected] }; Changed(true); SelectPad(selected); };
+            Get<Button>("ResetPad").Click += delegate { settings.Pads[settings.Inputs[selected]] = new Settings().Pads[settings.Inputs[selected]]; settings.InstrumentNotes[selected] = Kit.Notes[selected]; Changed(true); SelectPad(selected); };
             Get<Button>("PanicButton").Click += delegate { midi.Panic(); if (audio != null) audio.Panic(); Get<TextBlock>("LastHit").Text = "Active sounds stopped."; };
             Get<Button>("LogButton").Click += delegate { var panel = Get<Border>("LogPanel"); panel.Visibility = panel.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible; };
         }
         void SelectPad(int index) {
-            selected = index; updating = true; var p = settings.Pads[index];
-            Get<TextBlock>("SelectedName").Text = Protocol.Names[index]; Get<CheckBox>("MuteToggle").IsChecked = p.Muted;
+            selected = index; updating = true; var p = SelectedPad;
+            Get<TextBlock>("SelectedName").Text = Kit.Names[index]; Get<CheckBox>("MuteToggle").IsChecked = p.Muted;
             Get<Slider>("ThresholdSlider").Value = p.Hit; Get<Slider>("ResetSlider").Maximum = p.Hit - 1; Get<Slider>("ResetSlider").Value = p.Reset;
             Get<Slider>("GainSlider").Value = p.Gain; Get<Slider>("CurveSlider").Value = p.Curve; Get<Slider>("GuardSlider").Value = p.RetriggerMs;
-            Get<Slider>("FloorSlider").Value = p.VelocityFloor;
-            Get<ComboBox>("NoteCombo").SelectedItem = p.Note;
-            for (int i = 0; i < 8; i++) { padCards[i].BorderBrush = Brush(i == index ? "#C5F36B" : "#30372B"); padCards[i].Background = Brush(i == index ? "#28321F" : "#1B1F19"); padCards[i].Opacity = settings.Pads[i].Muted ? .5 : 1; }
-            updating = false; RefreshValues();
+            Get<Slider>("FloorSlider").Maximum = p.VelocityCeiling; Get<Slider>("FloorSlider").Value = p.VelocityFloor;
+            Get<Slider>("CeilingSlider").Value = p.VelocityCeiling;
+            Get<ComboBox>("NoteCombo").SelectedItem = settings.InstrumentNotes[index];
+            for (int i = 0; i < 8; i++) { padCards[i].BorderBrush = Brush(i == index ? "#C5F36B" : "#30372B"); padCards[i].Background = Brush(i == index ? "#28321F" : "#1B1F19"); padCards[i].Opacity = settings.Pads[settings.Inputs[i]].Muted ? .5 : 1; padNotes[i].Text = "A" + settings.Inputs[i] + " · NOTE " + settings.InstrumentNotes[i]; }
+            updating = false; RefreshValues(); RefreshSampleChoices(); if (kitView != null) kitView.Update(meters,selected,learning ? learnPart : -1);
         }
         void PadChanged() {
-            var p = settings.Pads[selected]; p.Hit = (int)Get<Slider>("ThresholdSlider").Value; p.Reset = (int)Get<Slider>("ResetSlider").Value;
+            var p = SelectedPad; p.Hit = (int)Get<Slider>("ThresholdSlider").Value; p.Reset = (int)Get<Slider>("ResetSlider").Value;
             p.Gain = Get<Slider>("GainSlider").Value; p.Curve = Get<Slider>("CurveSlider").Value; p.RetriggerMs = (int)Get<Slider>("GuardSlider").Value;
             p.VelocityFloor = (int)Get<Slider>("FloorSlider").Value;
+            p.VelocityCeiling = (int)Get<Slider>("CeilingSlider").Value;
             settings.Normalize(); updating = true; Get<Slider>("ResetSlider").Maximum = p.Hit - 1; Get<Slider>("ResetSlider").Value = p.Reset; updating = false;
+            updating = true; Get<Slider>("FloorSlider").Maximum = p.VelocityCeiling; Get<Slider>("FloorSlider").Value = p.VelocityFloor; updating = false;
             Changed(true); RefreshValues();
         }
         void RefreshValues() {
-            var p = settings.Pads[selected];
+            var p = SelectedPad;
             Get<TextBlock>("ThresholdValue").Text = p.Hit.ToString(); Get<TextBlock>("ResetValue").Text = p.Reset.ToString();
             Get<TextBlock>("GainValue").Text = p.Gain.ToString("0.00") + "×"; Get<TextBlock>("CurveValue").Text = p.Curve.ToString("0.00"); Get<TextBlock>("GuardValue").Text = p.RetriggerMs + " ms";
             Get<TextBlock>("FloorValue").Text = p.VelocityFloor.ToString();
-            Get<TextBlock>("SelectedInput").Text = "A" + selected + " / " + p.Note;
-            padNotes[selected].Text = p.Muted ? "MUTED" : "NOTE " + p.Note;
+            Get<TextBlock>("CeilingValue").Text = p.VelocityCeiling.ToString();
+            Get<TextBlock>("SelectedInput").Text = "A" + settings.Inputs[selected] + " / " + settings.InstrumentNotes[selected];
+            padNotes[selected].Text = p.Muted ? "MUTED" : "A" + settings.Inputs[selected] + " · NOTE " + settings.InstrumentNotes[selected];
             Get<TextBlock>("VolumeValue").Text = Math.Round(settings.Volume * 100) + "%";
         }
         void Changed(bool thresholds) {
@@ -198,14 +204,14 @@ namespace Pulse {
         }
         void Enqueue(Frame f) { if (frames.Count > 512) { Frame discard; frames.TryDequeue(out discard); } frames.Enqueue(f); }
         void Hit(int index, int velocity, bool preview) {
-            var cfg = live; var p = cfg.Pads[index]; long now = clock.ElapsedMilliseconds;
+            var cfg = live; var p = cfg.Pads[cfg.Inputs[index]]; long now = clock.ElapsedMilliseconds;
             if (!preview && now - lastHits[index] < p.RetriggerMs) return;
             if (!preview) lastHits[index] = now;
             int output = Protocol.Velocity(velocity,p);
             Enqueue(new Frame(preview ? "PREVIEW" : "HIT",index,output));
             if (p.Muted || smoke) return;
             if (cfg.Sound && audio != null) audio.Hit(index,output);
-            midi.Hit(p.Note,output,cfg.Channel,now);
+            if (cfg.MidiEnabled) midi.Hit(Math.Max(0,Math.Min(127,cfg.InstrumentNotes[index] + cfg.Transpose)),output,cfg.Channel,now,cfg.NoteOffMs);
         }
         void Tick() {
             if (timer != null) timer.Interval = TimeSpan.FromMilliseconds(Window.IsVisible ? 25 : 250);
@@ -231,16 +237,19 @@ namespace Pulse {
                         if (settings.MidiOutput != "" && !names.Contains(settings.MidiOutput)) cb.Items.Add(settings.MidiOutput);
                         cb.SelectedIndex = settings.MidiOutput == "" ? 0 : cb.Items.IndexOf(settings.MidiOutput); updating = false;
                     }
-                    string nextMidiState = midi.Ensure(settings.MidiOutput);
+                    string nextMidiState = midi.Ensure(settings.MidiEnabled ? settings.MidiOutput : "");
                     if (nextMidiState != midiState) logs.Enqueue(nextMidiState);
                     midiState = nextMidiState; Get<TextBlock>("MidiStatus").Text = midiState;
                 } catch (Exception e) { logs.Enqueue("MIDI: " + e.Message); }
             }
             Frame f; int count = 0;
             while (count++ < 128 && frames.TryDequeue(out f)) {
+                if (f.Kind == "LEARN") { CaptureLearn(f.Index,f.Value); continue; }
                 if (f.Kind == "RAW") { rawLabels[f.Index].Text = "PEAK  " + f.Value; }
-                else { meters[f.Index] = Math.Max(.06, f.Value / 127.0); if (f.Kind == "HIT") { hits++; Get<TextBlock>("HitCount").Text = hits.ToString("N0"); } Get<TextBlock>("LastHit").Text = (f.Kind == "PREVIEW" ? "Audition · " : "Last hit · ") + Protocol.Names[f.Index] + " · velocity " + f.Value + (settings.Pads[f.Index].Muted ? " · muted" : ""); }
+                else { meters[f.Index] = Math.Max(.7, f.Value / 127.0); if (f.Kind == "HIT") { hits++; Get<TextBlock>("HitCount").Text = hits.ToString("N0"); } Get<TextBlock>("LastHit").Text = (f.Kind == "PREVIEW" ? "Audition · " : "Last hit · ") + Kit.Names[f.Index] + " · velocity " + f.Value + (settings.Pads[settings.Inputs[f.Index]].Muted ? " · muted" : ""); }
             }
+            UpdateLearn();
+            if (kitView != null) kitView.Update(meters,selected,learning ? learnPart : -1);
             for (int i = 0; i < 8; i++) { meterFills[i].Width = Math.Max(0, padCards[i].ActualWidth - 30) * meters[i]; meters[i] *= .91; }
             string line; while (logs.TryDequeue(out line)) {
                 string entry = DateTime.Now.ToString("HH:mm:ss") + "  " + line + Environment.NewLine;
@@ -257,6 +266,7 @@ namespace Pulse {
         }
         void Show() { Window.Show(); Window.WindowState = WindowState.Normal; Window.Activate(); }
         void Shutdown() {
+            exiting = true;
             if (timer != null) timer.Stop(); if (dirty) Save();
             if (connection != null) connection.Dispose();
             if (midiTimer != null) { using (var done = new ManualResetEvent(false)) { if (midiTimer.Dispose(done)) done.WaitOne(); } }
@@ -274,16 +284,26 @@ namespace Pulse {
             string folder = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"..","artifacts")); Directory.CreateDirectory(folder);
             try {
                 connectionText = "Preview · no hardware connection"; Tick(); Window.UpdateLayout(); Screenshot(System.IO.Path.Combine(folder,"pulse-preview.png"));
-                SelectPad(1); Get<Slider>("ThresholdSlider").Value = 70; Get<Slider>("ResetSlider").Value = 32; Get<Slider>("GainSlider").Value = 1.35;
-                if (settings.Pads[1].Hit != 70 || settings.Pads[1].Reset != 32 || Math.Abs(settings.Pads[1].Gain - 1.35) > .01) throw new Exception("Pad sliders did not update settings");
-                Get<Slider>("ThresholdSlider").Value = 20; if (settings.Pads[1].Reset >= 20) throw new Exception("Reset threshold invariant broken");
+                SelectPad(3); Get<Slider>("ThresholdSlider").Value = 70; Get<Slider>("ResetSlider").Value = 32; Get<Slider>("GainSlider").Value = 1.35;
+                if (SelectedPad.Hit != 70 || SelectedPad.Reset != 32 || Math.Abs(SelectedPad.Gain - 1.35) > .01) throw new Exception("Pad sliders did not update settings");
+                Get<Slider>("ThresholdSlider").Value = 20; if (SelectedPad.Reset >= 20) throw new Exception("Reset threshold invariant broken");
                 Get<Slider>("ThresholdSlider").Value = 70; Get<Slider>("ResetSlider").Value = 32;
                 Get<Button>("TestPad").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Tick();
                 if (hits != 0 || !Get<TextBlock>("LastHit").Text.StartsWith("Audition")) throw new Exception("Audition incorrectly counted as a real hit");
-                Get<ComboBox>("NoteCombo").SelectedItem = 40; if (settings.Pads[1].Note != 40) throw new Exception("MIDI remap failed");
-                Get<Button>("ResetPad").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); if (settings.Pads[1].Note != 38 || settings.Pads[1].Hit != 40) throw new Exception("Pad reset failed");
+                Get<ComboBox>("NoteCombo").SelectedItem = 40; if (settings.InstrumentNotes[3] != 40) throw new Exception("MIDI remap failed");
+                Get<Button>("ResetPad").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); if (settings.InstrumentNotes[3] != 38 || SelectedPad.Hit != 20) throw new Exception("Pad reset failed");
                 Screenshot(System.IO.Path.Combine(folder,"pulse-tuning.png"));
-                File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"PASS: XAML load, 8 pads, sliders, reset invariant, audition, MIDI remap, pad reset, screenshots. No hardware or settings writes.");
+                Array.Clear(meters,0,8); ReceiveInput(new Frame("HIT",settings.Inputs[3],120)); Tick(); Screenshot(System.IO.Path.Combine(folder,"pulse-kit-hit.png"));
+                if (hits != 1 || meters[3] < .5 || meters[0] != 0) throw new Exception("Hardware hit did not highlight only its assigned part");
+                SetView(true); Screenshot(System.IO.Path.Combine(folder,"pulse-classic.png")); if (Get<ContentControl>("KitHost").Visibility != Visibility.Collapsed) throw new Exception("View switching failed");
+                var before = (int[])settings.Inputs.Clone(); BeginLearn(false); learn.Retry(-10000); CaptureLearn(7,600); learn.Tick(clock.ElapsedMilliseconds+200); UpdateLearn();
+                Screenshot(System.IO.Path.Combine(folder,"pulse-setup.png")); EndLearn(false); if (!settings.Inputs.SequenceEqual(before)) throw new Exception("Cancel changed assignments");
+                BeginLearn(true);
+                for (int step = 0; step < 8; step++) { learn.Retry(-10000); CaptureLearn(7-step,600); learn.Tick(clock.ElapsedMilliseconds+200); UpdateLearn(); Get<Button>("SetupAccept").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }
+                if (learning || !settings.Inputs.SequenceEqual(new[]{7,6,5,4,3,2,1,0}) || settings.Pads[0].Hit != 140 || settings.InstrumentNotes[0] != 42) throw new Exception("All-pad setup moved sensor settings or failed to save mapping");
+                var defaults = new Settings(); defaults.Normalize(); ApplyPreset(defaults); SelectPad(0); SetView(false);
+                if (!settings.Inputs.SequenceEqual(Kit.DefaultInputs) || SelectedPad.Hit != 20) throw new Exception("Preset restore failed");
+                File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"PASS: kit/classic views, isolated hit glow, sliders, audition, calibrated reset, MIDI note mapping, learn cancel, all-eight assignment, preset restore. No hardware or user settings writes.");
             } catch (Exception e) { File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"FAIL: " + e); Environment.ExitCode = 1; }
             exiting = true; Window.Close();
         }
