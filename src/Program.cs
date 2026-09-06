@@ -231,7 +231,9 @@ namespace Pulse {
                         if (settings.MidiOutput != "" && !names.Contains(settings.MidiOutput)) cb.Items.Add(settings.MidiOutput);
                         cb.SelectedIndex = settings.MidiOutput == "" ? 0 : cb.Items.IndexOf(settings.MidiOutput); updating = false;
                     }
-                    midiState = midi.Ensure(settings.MidiOutput); Get<TextBlock>("MidiStatus").Text = midiState;
+                    string nextMidiState = midi.Ensure(settings.MidiOutput);
+                    if (nextMidiState != midiState) logs.Enqueue(nextMidiState);
+                    midiState = nextMidiState; Get<TextBlock>("MidiStatus").Text = midiState;
                 } catch (Exception e) { logs.Enqueue("MIDI: " + e.Message); }
             }
             Frame f; int count = 0;

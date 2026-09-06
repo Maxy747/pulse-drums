@@ -46,7 +46,7 @@ Settings live in `%LOCALAPPDATA%\PulseDrums\settings.xml`, with the previous sav
 | Crash | 10 | 5 | 49 |
 | Ride | 10 | 9 | 51 |
 
-All pads use velocity floor **50**, gain **1**, curve **0.6**, and no additional retrigger guard. The MIDI channel is **1**, with output **Nano Drums 1** and built-in sounds off. Install using `install.ps1 -ImportCurrentKit` to seed these values only if no Pulse settings already exist. The general app defaults remain suitable for a fresh kit.
+All pads use velocity floor **50**, gain **1**, curve **0.6**, and no additional retrigger guard. The MIDI channel is **1**, with output **Nano Drums** and built-in sounds off. The old app displayed this output as **Nano Drums 1**; Windows' native MIDI API exposes it as **Nano Drums**, which was verified on this PC. MIDI notes are released after 10 ms. Install using `install.ps1 -ImportCurrentKit` to seed these values only if no Pulse settings already exist. The general app defaults remain suitable for a fresh kit.
 
 ## Firmware compatibility
 

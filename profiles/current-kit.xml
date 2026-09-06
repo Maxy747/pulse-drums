@@ -87,6 +87,6 @@
   <MinimizeToTray>true</MinimizeToTray>
   <Port />
   <DeviceId />
-  <MidiOutput>Nano Drums 1</MidiOutput>
+  <MidiOutput>Nano Drums</MidiOutput>
   <Channel>1</Channel>
 </Settings>
