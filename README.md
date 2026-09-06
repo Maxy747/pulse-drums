@@ -38,7 +38,7 @@ Sounds are paused during setup. Learning uses real serial sensor peaks, not mous
 
 ## Sounds and Ableton
 
-The first sample-enabled run loads **GSCW Kit 2** and selects direct playback. Pick **GSCW Kit 1**, **GSCW Kit 2**, or **Pulse synth** in the bottom selector and choose **Apply sounds** to change the whole kit.
+The first sample-enabled run loads **GSCW Kit 2** with **V05 for every piece** and selects direct playback. Both GSCW kit presets use V05 by default. Pick **GSCW Kit 1**, **GSCW Kit 2**, or **Pulse synth** in the bottom selector and choose **Apply sounds** to change the whole kit. Individual sample choices and named presets remain editable and are remembered.
 
 The selected drum's **Sound** picker lists only that instrument's samples: crash for Crash, snare for Snare, and separate low/mid/floor tom categories. Splash samples are excluded from Crash. **Load WAV…** accepts your own matching sound; known filenames from another instrument are rejected. **Sample folder…** points Pulse at a different downloaded library. Sample loading happens off the hit-processing thread; failed loads retain the previous sound and show a message.
 

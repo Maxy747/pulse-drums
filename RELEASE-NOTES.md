@@ -1,4 +1,6 @@
-Pulse 2.0 — your physical kit, on screen.
+Pulse 2.0.1 — your physical kit, on screen, with V05 sound defaults.
+
+- Both GSCW kit presets now default to V05 for every piece. Individual choices and saved presets remain editable.
 
 - Top-down kit in your numbered arrangement, with independent green hit glows. Classic controls remain switchable.
 - Hands-free setup for one input or all eight: strike each requested piece twice to confirm and automatically advance. No Confirm/Next clicks. Cancel preserves previous assignments.

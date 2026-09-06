@@ -80,7 +80,7 @@ namespace Pulse {
                 Check(SampleLibrary.Classify("TOM13-V01-StarClassic-13x13.wav") == 6 && SampleLibrary.Classify("V01-TTom-12.wav") == 2,"Low and floor tom categories stay separate");
                 Check(!SampleLibrary.Matches(1,"Ride-V01-ROBMOR-SABIAN-22.wav",SettingsStore.Folder),"Crash rejects a ride sample");
                 if (library.Length > 0) {
-                    for (int kit = 1; kit <= 2; kit++) { var presetFiles = SampleLibrary.Preset(library,kit); Check(presetFiles.All(File.Exists),"Eight working defaults for GSCW kit " + kit); for (int part = 0; part < 8; part++) Check(SampleLibrary.Classify(Path.GetFileName(presetFiles[part])) == part,"Preset sample matches instrument " + part); }
+                    for (int kit = 1; kit <= 2; kit++) { var presetFiles = SampleLibrary.Preset(library,kit); Check(presetFiles.All(File.Exists),"Eight working defaults for GSCW kit " + kit); Check(presetFiles.All(p => Path.GetFileName(p).ToUpperInvariant().Contains("V05")),"All eight preset defaults use V05 in kit " + kit); for (int part = 0; part < 8; part++) Check(SampleLibrary.Classify(Path.GetFileName(presetFiles[part])) == part,"Preset sample matches instrument " + part); }
                     foreach (var sample in library) { var data = WaveFile.Load(sample.Path); Check(data.Length % 2 == 0 && data.Any(v => Math.Abs(v) > .001),"Decode " + sample.Label); }
                     Console.WriteLine("Validated " + library.Length + " downloaded WAV samples.");
                 }

@@ -55,7 +55,7 @@ namespace Pulse {
             return !System.IO.Path.GetFullPath(path).StartsWith(root,StringComparison.OrdinalIgnoreCase);
         }
         static int Preferred(string path, int part) {
-            string n = System.IO.Path.GetFileName(path).ToLowerInvariant(); int score = n.Contains("v01") ? 10 : 0;
+            string n = System.IO.Path.GetFileName(path).ToLowerInvariant(); int score = n.Contains("v05") ? 20 : n.Contains("v01") ? 5 : 0;
             if (part == 0 && (n.Contains("-cl-") || n.Contains("-cld"))) score += 100;
             if (part == 1 && n.Contains("crash") && !n.Contains("choke")) score += 100;
             if (part == 3 && (n.StartsWith("snare") || n.Contains("eq-sd"))) score += 100;
