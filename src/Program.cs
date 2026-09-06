@@ -299,7 +299,8 @@ namespace Pulse {
                 var before = (int[])settings.Inputs.Clone(); BeginLearn(false); learn.Retry(-10000); CaptureLearn(7,600); learn.Tick(clock.ElapsedMilliseconds+200); UpdateLearn();
                 Screenshot(System.IO.Path.Combine(folder,"pulse-setup.png")); EndLearn(false); if (!settings.Inputs.SequenceEqual(before)) throw new Exception("Cancel changed assignments");
                 BeginLearn(true);
-                for (int step = 0; step < 8; step++) { learn.Retry(-10000); CaptureLearn(7-step,600); learn.Tick(clock.ElapsedMilliseconds+200); UpdateLearn(); Get<Button>("SetupAccept").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }
+                long setupTime = clock.ElapsedMilliseconds + 500;
+                for (int step = 0; step < 8; step++) { long now = setupTime + step*1200; learn.Feed(7-step,600,now); learn.Tick(now+200); UpdateLearn(); learn.Feed(7-step,600,now+500); learn.Tick(now+700); UpdateLearn(); }
                 if (learning || !settings.Inputs.SequenceEqual(new[]{7,6,5,4,3,2,1,0}) || settings.Pads[0].Hit != 140 || settings.InstrumentNotes[0] != 42) throw new Exception("All-pad setup moved sensor settings or failed to save mapping");
                 var defaults = new Settings(); defaults.Normalize(); ApplyPreset(defaults); SelectPad(0); SetView(false);
                 if (!settings.Inputs.SequenceEqual(Kit.DefaultInputs) || SelectedPad.Hit != 20) throw new Exception("Preset restore failed");

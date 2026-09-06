@@ -20,11 +20,12 @@ namespace Pulse {
         }
         public static int Classify(string file) {
             string n = file.ToLowerInvariant();
-            if (n.Contains("hhats") || n.Contains("hats")) return 0;
-            if (n.Contains("crash") || n.Contains("crsh") || n.Contains("splash") || n.Contains("chk")) return 1;
+            if (n.Contains("hhats") || n.Contains("hats") || n.StartsWith("cld-op")) return 0;
+            if (n.Contains("splash")) return -1;
+            if (n.Contains("crash") || n.Contains("crsh") || (n.Contains("chk") && (n.Contains("14") || n.Contains("18")))) return 1;
             if (n.Contains("ride") || n.Contains("rbell") || n.StartsWith("bell-")) return 7;
             if (n.Contains("kick") || n.Contains("-kd")) return 5;
-            if (n.Contains("snare") || n.Contains("-sd") || n.Contains("s stick") || n.Contains("sstick") || n.Contains("cw-6x13")) return 3;
+            if (n.Contains("snare") || n.Contains("snr-off") || n.StartsWith("sd-") || n.Contains("-sd") || n.Contains("s stick") || n.Contains("sstick") || n.Contains("cw-6x13") || n.Contains("cw 6x13")) return 3;
             if (n.Contains("tom") || n.Contains("tflam") || n.Contains("flam10") || n.Contains("flam13")) {
                 if (n.Contains("13")) return 6;
                 if (n.Contains("12")) return 2;
@@ -36,12 +37,22 @@ namespace Pulse {
             var result = new string[8];
             for (int part = 0; part < 8; part++) {
                 var candidates = choices.Where(c => c.KitNumber == kit && c.Part == part).ToArray();
-                // Kit 1 contains 10" and 13" toms, but no separate 12" tom.
-                if (candidates.Length == 0 && part == 2) candidates = choices.Where(c => c.KitNumber == kit && c.Part == 6).ToArray();
+                // If a kit lacks a piece, use the same instrument from the other kit.
+                // Never substitute a different drum (e.g. a floor tom for a low tom).
+                if (candidates.Length == 0) candidates = choices.Where(c => c.Part == part).ToArray();
                 var choice = candidates.OrderByDescending(c => Preferred(c.Path, part)).ThenBy(c => c.Path).FirstOrDefault();
                 result[part] = choice == null ? "" : choice.Path;
             }
             return result;
+        }
+        public static bool Matches(int part, string path, string libraryRoot) {
+            if (String.IsNullOrEmpty(path)) return true;
+            int classified = Classify(System.IO.Path.GetFileName(path));
+            if (classified >= 0) return classified == part;
+            // Unknown custom WAV names are chosen explicitly by the user. Unknown
+            // library categories (such as splash) must not appear on unrelated pieces.
+            string root = System.IO.Path.GetFullPath(libraryRoot).TrimEnd(System.IO.Path.DirectorySeparatorChar) + System.IO.Path.DirectorySeparatorChar;
+            return !System.IO.Path.GetFullPath(path).StartsWith(root,StringComparison.OrdinalIgnoreCase);
         }
         static int Preferred(string path, int part) {
             string n = System.IO.Path.GetFileName(path).ToLowerInvariant(); int score = n.Contains("v01") ? 10 : 0;

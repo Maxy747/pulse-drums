@@ -45,7 +45,7 @@
           <Grid Margin="0,0,0,10"><StackPanel Orientation="Horizontal"><Button x:Name="KitViewButton" Content="Kit view" Padding="12,6"/><Button x:Name="ClassicViewButton" Content="Classic controls" Padding="12,6" Margin="6,0,0,0" Background="Transparent"/></StackPanel><Button x:Name="SetupAllButton" Content="Set up my kit" HorizontalAlignment="Right" Padding="12,6"/></Grid>
           <ContentControl x:Name="KitHost"/>
           <UniformGrid x:Name="PadsGrid" Rows="2" Columns="4" Margin="-5,0,-5,0" Visibility="Collapsed"/>
-          <Border x:Name="SetupPanel" Visibility="Collapsed" Background="#1E2C20" BorderBrush="#61774A" BorderThickness="1" CornerRadius="9" Padding="14" Margin="0,10,0,0"><StackPanel><TextBlock x:Name="SetupTitle" FontSize="18" FontWeight="SemiBold"/><TextBlock x:Name="SetupHint" TextWrapping="Wrap" Foreground="#BBCDBB" Margin="0,6,0,10"/><StackPanel Orientation="Horizontal"><Button x:Name="SetupAccept" Content="Use this input"/><Button x:Name="SetupRetry" Content="Listen again" Margin="6,0"/><Button x:Name="SetupCancel" Content="Cancel" Background="Transparent"/></StackPanel></StackPanel></Border>
+          <Border x:Name="SetupPanel" Visibility="Collapsed" Background="#1E2C20" BorderBrush="#61774A" BorderThickness="1" CornerRadius="9" Padding="14" Margin="0,10,0,0"><StackPanel><TextBlock x:Name="SetupTitle" FontSize="18" FontWeight="SemiBold"/><TextBlock x:Name="SetupHint" TextWrapping="Wrap" Foreground="#BBCDBB" Margin="0,6,0,10"/><Button x:Name="SetupCancel" Content="Cancel setup" HorizontalAlignment="Left" Background="Transparent"/></StackPanel></Border>
           <Border Background="#181C17" BorderBrush="#2B3227" BorderThickness="1" CornerRadius="12" Padding="18" Margin="0,14,0,0">
             <StackPanel>
               <Grid><TextBlock Text="OUTPUT" Style="{StaticResource Caption}"/><TextBlock x:Name="AudioStatus" Text="Stereo sample engine" Style="{StaticResource Muted}" FontSize="10" HorizontalAlignment="Right"/></Grid>
@@ -65,7 +65,7 @@
             <CheckBox x:Name="MuteToggle" Content="Mute this pad" Margin="0,5,0,10"/>
             <TextBlock Text="SOUND" Style="{StaticResource Caption}" Margin="0,0,0,6"/>
             <ComboBox x:Name="SampleCombo" AutomationProperties.Name="Selected drum sample"/>
-            <Grid Margin="0,4,0,7"><CheckBox x:Name="AllSamplesToggle" Content="All sounds" FontSize="10"/><Button x:Name="BrowseSampleButton" Content="Load WAV…" HorizontalAlignment="Right" Padding="8,3" FontSize="10"/></Grid>
+            <Grid Margin="0,4,0,7"><TextBlock Text="Matching sounds only" Style="{StaticResource Muted}" FontSize="10" VerticalAlignment="Center"/><Button x:Name="BrowseSampleButton" Content="Load WAV…" HorizontalAlignment="Right" Padding="8,3" FontSize="10"/></Grid>
             <TextBlock x:Name="SampleStatus" Text="Synth fallback" Style="{StaticResource Muted}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,10"/>
             <Grid><TextBlock Text="Trigger threshold" Style="{StaticResource Muted}"/><TextBlock x:Name="ThresholdValue" HorizontalAlignment="Right" Foreground="#C5F36B"/></Grid>
             <Slider x:Name="ThresholdSlider" Minimum="2" Maximum="1022" IsSnapToTickEnabled="True" TickFrequency="1" AutomationProperties.Name="Trigger threshold" ToolTip="Minimum sensor peak that triggers a hit. Lower is more sensitive."/>

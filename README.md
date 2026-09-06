@@ -30,9 +30,9 @@ The default view follows the numbered physical kit. Pieces glow green on a hit, 
 The numbers describe physical positions, **not wiring**. If inputs are swapped, learn them:
 
 1. Choose **Set up my kit** for all eight pieces, or select a piece and choose **Assign input**.
-2. Strike only the requested instrument. Pulse picks the largest raw peak in a 160 ms capture window, after a short settling period.
-3. Review the proposed input. Choose **Use this input**, or **Listen again** if it detected the wrong pad.
-4. Full setup saves after all eight confirmations. Cancel discards the draft. One-piece assignment swaps the displaced input so two pieces cannot accidentally share one sensor.
+2. Strike only the requested instrument **twice**. Pulse picks the largest raw peak in each short capture window and uses a brief ringing guard to keep one strike from counting twice.
+3. Two matching strikes confirm the input and move to the next piece automatically. If the strikes disagree or an input was already assigned, it keeps listening. There are no Confirm or Next buttons.
+4. Full setup saves after all eight pieces have been confirmed twice. Cancel discards the draft. One-piece assignment works the same way and swaps the displaced input so two pieces cannot accidentally share one sensor.
 
 Sounds are paused during setup. Learning uses real serial sensor peaks, not mouse/keyboard auditions. The same assignment controls the kit glow, sample and MIDI note. Trigger calibration remains attached to each physical Arduino input. A sensor must exceed its current firmware threshold to be detected; adjust the threshold if a pad never registers.
 
@@ -40,7 +40,7 @@ Sounds are paused during setup. Learning uses real serial sensor peaks, not mous
 
 The first sample-enabled run loads **GSCW Kit 2** and selects direct playback. Pick **GSCW Kit 1**, **GSCW Kit 2**, or **Pulse synth** in the bottom selector and choose **Apply sounds** to change the whole kit.
 
-The selected drum's **Sound** picker lists relevant samples. Enable **All sounds** to choose any of the 360 WAVs, or use **Load WAV…** for your own file. **Sample folder…** points Pulse at a different downloaded library. Sample loading happens off the hit-processing thread; failed loads retain the previous sound and show a message.
+The selected drum's **Sound** picker lists only that instrument's samples: crash for Crash, snare for Snare, and separate low/mid/floor tom categories. Splash samples are excluded from Crash. **Load WAV…** accepts your own matching sound; known filenames from another instrument are rejected. **Sample folder…** points Pulse at a different downloaded library. Sample loading happens off the hit-processing thread; failed loads retain the previous sound and show a message.
 
 Output choices:
 
@@ -50,7 +50,7 @@ Output choices:
 
 For Ableton, choose your existing loopMIDI output, then enable that input in Ableton and arm the instrument track. On this PC Windows calls the port **Nano Drums**, whereas the old Python UI displayed **Nano Drums 1**. Pulse remembers the output and retries when it becomes available. It does not install a virtual MIDI driver.
 
-WAV playback supports mono/stereo PCM 8/16/24/32-bit and float32, with sample-rate conversion in memory to 48 kHz stereo. Original files are not rewritten. One-shots are limited to 60 seconds/128 MB. GSCW Kit 1 has no separate 12-inch tom, so its Low tom and Floor tom defaults share a 13-inch sound; Kit 2 has distinct 10/12/13-inch choices. See [sample source and license notes](THIRD-PARTY.md).
+WAV playback supports mono/stereo PCM 8/16/24/32-bit and float32, with sample-rate conversion in memory to 48 kHz stereo. Original files are not rewritten. One-shots are limited to 60 seconds/128 MB. GSCW Kit 1 has no separate 12-inch tom, so its Low tom preset uses the matching 12-inch sample from Kit 2; Kit 2 has distinct 10/12/13-inch choices. See [sample source and license notes](THIRD-PARTY.md).
 
 ## Your defaults and saved presets
 

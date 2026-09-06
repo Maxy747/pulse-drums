@@ -1,9 +1,9 @@
 Pulse 2.0 — your physical kit, on screen.
 
 - Top-down kit in your numbered arrangement, with independent green hit glows. Classic controls remain switchable.
-- Assign one input or all eight by playing the physical pads. Review each detection; cancel preserves previous assignments.
+- Hands-free setup for one input or all eight: strike each requested piece twice to confirm and automatically advance. No Confirm/Next clicks. Cancel preserves previous assignments.
 - The learned map drives the diagram, samples and MIDI together, while sensor thresholds stay with their inputs.
-- Native stereo WAV playback, two GSCW kit presets, per-piece sound selection, custom WAV loading and a synth fallback.
+- Native stereo WAV playback, two GSCW kit presets, instrument-only sound lists, matching custom WAV loading and a synth fallback.
 - All 360 GSCW samples downloaded and decoded locally. Samples are fetched directly from their source by the installer and stored separately from app updates.
 - Direct samples, Ableton/MIDI, or both as the output mode.
 - The supplied calibration is the factory default. Named presets save assignments, tuning, sounds and musical MIDI settings.

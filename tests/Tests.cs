@@ -44,10 +44,16 @@ namespace Pulse {
                 var assignment = new LearnSession(calibrated.Inputs,0,true,0);
                 assignment.Feed(2,200,100); assignment.Tick(300); Check(assignment.Candidate == -1,"Setup settling guard rejects previous ringing");
                 assignment.Feed(2,70,400); assignment.Feed(7,600,405); assignment.Tick(570); Check(assignment.Candidate == 7,"Strongest raw input wins within capture window");
-                assignment.Accept(600); assignment.Feed(7,500,1000); assignment.Tick(1200); Check(assignment.IsDuplicate && !assignment.Accept(1201),"Full setup rejects input already assigned to previous part");
-                assignment.Retry(1300); assignment.Feed(6,500,1700); assignment.Tick(1900); assignment.Accept(2000);
-                for (int step = 2; step < 8; step++) { long now = 3000 + step*1000; assignment.Feed(7-step,500,now); assignment.Tick(now+200); assignment.Accept(now+201); }
+                Check(assignment.Confirmations == 1 && assignment.Part == 0 && !assignment.Accept(600),"One strike cannot confirm an input");
+                assignment.Feed(7,500,600); assignment.Tick(800); Check(assignment.Confirmations == 1,"Immediate ringing cannot count as the second confirmation");
+                assignment.Feed(7,500,900); assignment.Tick(1100); Check(assignment.Part == 1,"Two strikes automatically advance to the next piece");
+                assignment.Feed(7,500,1500); assignment.Tick(1700); Check(assignment.Part == 1 && assignment.Confirmations == 0 && assignment.Hint.Contains("already assigned"),"Already-assigned input is rejected without requiring a button");
+                assignment.Feed(6,500,2000); assignment.Tick(2200); assignment.Feed(6,500,2500); assignment.Tick(2700);
+                for (int step = 2; step < 8; step++) { long now = 4000 + step*1000; assignment.Feed(7-step,500,now); assignment.Tick(now+200); assignment.Feed(7-step,500,now+450); assignment.Tick(now+650); }
                 Check(assignment.Complete && assignment.Map.SequenceEqual(new[]{7,6,5,4,3,2,1,0}),"Full kit setup commits a complete one-to-one map");
+                var mismatch = new LearnSession(calibrated.Inputs,3,false,0); mismatch.Feed(1,400,400); mismatch.Tick(600); mismatch.Feed(2,400,900); mismatch.Tick(1100);
+                Check(!mismatch.Complete && mismatch.Candidate == 2 && mismatch.Confirmations == 1,"Mismatched strikes need another matching strike");
+                mismatch.Feed(2,400,1500); mismatch.Tick(1700); Check(mismatch.Complete && mismatch.Map[3] == 2,"Single-piece setup completes hands-free");
                 Check(DrumConnection.IsCandidate("USB\\VID_1A86&PID_7523") && !DrumConnection.IsCandidate("ACPI\\PNP0501"),"USB discovery excludes unrelated onboard COM");
                 string folder = Path.Combine(Path.GetTempPath(), "pulse-tests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(folder);
                 try {
@@ -69,8 +75,12 @@ namespace Pulse {
                 if (!args.Contains("--no-audio")) using (var audio = new AudioEngine()) { audio.Start(); Thread.Sleep(250); Check(audio.Error == "", "Native waveOut initialization: " + audio.Error); }
                 using (var midi = new Midi()) { Check(midi.Ensure("") == "MIDI off", "Optional MIDI without a loopback driver"); midi.Panic(); }
                 var library = SampleLibrary.Scan(Path.Combine(SettingsStore.Folder,"Samples","GSCW"));
+                Check(SampleLibrary.Classify("6-Splash-V01-SABIAN-HH-6.wav") == -1,"Splash is not a crash");
+                Check(SampleLibrary.Classify("HHats-Crash-V01-SABIAN-AAX.wav") == 0,"Hi-hat articulation remains on hi-hat");
+                Check(SampleLibrary.Classify("TOM13-V01-StarClassic-13x13.wav") == 6 && SampleLibrary.Classify("V01-TTom-12.wav") == 2,"Low and floor tom categories stay separate");
+                Check(!SampleLibrary.Matches(1,"Ride-V01-ROBMOR-SABIAN-22.wav",SettingsStore.Folder),"Crash rejects a ride sample");
                 if (library.Length > 0) {
-                    for (int kit = 1; kit <= 2; kit++) Check(SampleLibrary.Preset(library,kit).All(File.Exists),"Eight working defaults for GSCW kit " + kit);
+                    for (int kit = 1; kit <= 2; kit++) { var presetFiles = SampleLibrary.Preset(library,kit); Check(presetFiles.All(File.Exists),"Eight working defaults for GSCW kit " + kit); for (int part = 0; part < 8; part++) Check(SampleLibrary.Classify(Path.GetFileName(presetFiles[part])) == part,"Preset sample matches instrument " + part); }
                     foreach (var sample in library) { var data = WaveFile.Load(sample.Path); Check(data.Length % 2 == 0 && data.Any(v => Math.Abs(v) > .001),"Decode " + sample.Label); }
                     Console.WriteLine("Validated " + library.Length + " downloaded WAV samples.");
                 }

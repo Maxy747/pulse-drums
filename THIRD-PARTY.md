@@ -12,7 +12,7 @@ Pinned revision: `ea524c8a952545fc099565426fc673e79076136f`
 
 The G&S Custom Works 2005 agreement describes royalty-free use and restrictions on resale, sublicensing and modification. Read the actual upstream license before using the sample library. Pulse does not change the sample files on disk; format decoding and sample-rate conversion occur in memory for playback.
 
-Kit 1 has recorded 10-inch and 13-inch toms, without a separate 12-inch tom. Its Low tom and Floor tom presets therefore initially share the 13-inch sample. Kit 2 provides 10/12/13-inch samples, so it is the first-run sound preset. Every part can be assigned any available sample, including a WAV from another folder.
+Kit 1 has recorded 10-inch and 13-inch toms, without a separate 12-inch tom. Its Low tom preset uses the matching 12-inch sample from Kit 2. Kit 2 provides 10/12/13-inch samples, so it is the first-run sound preset. Each part's selector is restricted to that instrument's category. Custom matching WAV files can also be loaded.
 
 ## Arduino interface
 

@@ -29,20 +29,13 @@ namespace Pulse {
             Get<Button>("ClassicViewButton").Click += delegate { SetView(true); };
             Get<Button>("SetupAllButton").Click += delegate { BeginLearn(true); };
             Get<Button>("AssignOneButton").Click += delegate { BeginLearn(false); };
-            Get<Button>("SetupRetry").Click += delegate { if (learn != null) { learn.Retry(clock.ElapsedMilliseconds); UpdateLearn(); } };
             Get<Button>("SetupCancel").Click += delegate { EndLearn(false); };
-            Get<Button>("SetupAccept").Click += delegate {
-                if (learn == null) return;
-                if (learn.Accept(clock.ElapsedMilliseconds)) { settings.Inputs = (int[])learn.Map.Clone(); EndLearn(true); Changed(false); SelectPad(selected); }
-                else { learnPart = learn.Part; SelectPad(learnPart); UpdateLearn(); }
-            };
             var route = Get<ComboBox>("RouteCombo"); route.Items.Add("Samples · play through speakers"); route.Items.Add("Ableton / MIDI only"); route.Items.Add("Samples + MIDI");
             route.SelectedIndex = settings.MidiEnabled && settings.Sound ? 2 : settings.Sound ? 0 : 1;
             route.SelectionChanged += delegate { if (updating) return; settings.Sound = route.SelectedIndex != 1; settings.MidiEnabled = route.SelectedIndex != 0; Get<CheckBox>("SoundToggle").IsChecked = settings.Sound; midi.Panic(); if (audio != null) audio.Panic(); lastMidiScan = -10000; Changed(false); };
             Get<ComboBox>("KitPresetCombo").ItemsSource = new[] {"GSCW Kit 1", "GSCW Kit 2", "Pulse synth"}; Get<ComboBox>("KitPresetCombo").SelectedIndex = 1;
             Get<Button>("ApplyKitButton").Click += delegate { ApplySoundKit(Get<ComboBox>("KitPresetCombo").SelectedIndex); };
             Get<ComboBox>("SampleCombo").SelectionChanged += delegate { if (sampleUpdating) return; var choice = Get<ComboBox>("SampleCombo").SelectedItem as SampleChoice; if (choice != null) LoadSample(selected,choice.Path,true); };
-            Get<CheckBox>("AllSamplesToggle").Click += delegate { RefreshSampleChoices(); };
             Get<Button>("BrowseSampleButton").Click += delegate { var dialog = new OpenFileDialog { Title = "Choose a sound for " + Kit.Names[selected], Filter = "WAV samples|*.wav" }; if (dialog.ShowDialog(Window) == true) LoadSample(selected,dialog.FileName,true); };
             Get<Button>("LibraryFolderButton").Click += delegate {
                 using (var dialog = new Forms.FolderBrowserDialog { Description = "Choose the downloaded drum-samples folder", SelectedPath = settings.SampleFolder }) if (dialog.ShowDialog() == Forms.DialogResult.OK) { settings.SampleFolder = dialog.SelectedPath; ScanLibrary(); Changed(false); }
@@ -81,10 +74,11 @@ namespace Pulse {
         void CaptureLearn(int input, int raw) { if (learn != null && learning) learn.Feed(input,raw,clock.ElapsedMilliseconds); }
         void UpdateLearn() {
             if (!learning || learn == null) return;
-            learn.Tick(clock.ElapsedMilliseconds); learnPart = learn.Part;
+            learn.Tick(clock.ElapsedMilliseconds);
+            if (learn.Complete) { settings.Inputs = (int[])learn.Map.Clone(); EndLearn(true); Changed(false); SelectPad(selected); return; }
+            if (learnPart != learn.Part) { learnPart = learn.Part; SelectPad(learnPart); }
             Get<TextBlock>("SetupTitle").Text = (learn.All ? "Step " + (learn.Part+1) + " of 8 · " : "Assign · ") + Kit.Names[learn.Part];
-            Get<TextBlock>("SetupHint").Text = learn.Candidate < 0 ? "Strike only " + Kit.Names[learn.Part] + ". The strongest sensor in the hit will appear here. Sounds are paused during setup." : learn.IsDuplicate ? "A" + learn.Candidate + " was already assigned in this setup. Strike the correct pad after choosing Listen again." : "Detected A" + learn.Candidate + " · peak " + learn.Peak + ". Use this input for " + Kit.Names[learn.Part] + ", or listen again. Changes are saved only when setup finishes.";
-            Get<Button>("SetupAccept").IsEnabled = learn.Candidate >= 0 && !learn.IsDuplicate;
+            Get<TextBlock>("SetupHint").Text = learn.Confirmations == 0 ? (learn.Hint == "" ? "Strike " + Kit.Names[learn.Part] + " twice. Waiting for your first strike… No buttons needed." : learn.Hint) : "1 of 2 · A" + learn.Candidate + " heard. Strike " + Kit.Names[learn.Part] + " once more to confirm.";
             if (kitView != null) kitView.Update(meters,selected,learnPart);
         }
         void EndLearn(bool saved) {
@@ -100,14 +94,14 @@ namespace Pulse {
         void StartSampleLibrary() {
             ScanLibrary();
             if (!settings.SampleDefaultsApplied && library.Length > 0) { settings.SampleFiles = SampleLibrary.Preset(library,2); settings.SampleDefaultsApplied = true; settings.Sound = true; settings.MidiEnabled = false; Get<ComboBox>("RouteCombo").SelectedIndex = 0; Changed(false); }
+            FixSampleTypes();
             for (int i = 0; i < 8; i++) LoadSample(i,settings.SampleFiles[i],false);
             RefreshSampleChoices();
         }
         void RefreshSampleChoices() {
             var cb = Get<ComboBox>("SampleCombo"); if (cb == null) return;
             sampleUpdating = true; cb.Items.Clear(); cb.Items.Add(new SampleChoice {Path = "",Label = "Pulse synth"});
-            bool all = Get<CheckBox>("AllSamplesToggle").IsChecked == true;
-            foreach (var c in library.Where(c => all || c.Part == selected || ((selected == 2 || selected == 4 || selected == 6) && (c.Part == 2 || c.Part == 4 || c.Part == 6)))) cb.Items.Add(c);
+            foreach (var c in library.Where(c => c.Part == selected)) cb.Items.Add(c);
             string path = settings.SampleFiles[selected];
             var match = cb.Items.Cast<SampleChoice>().FirstOrDefault(c => c.Path == path);
             if (match == null) { match = new SampleChoice { Path = path, Label = Path.GetFileNameWithoutExtension(path) }; cb.Items.Add(match); }
@@ -115,6 +109,7 @@ namespace Pulse {
             Get<TextBlock>("SampleStatus").Text = sampleStates[selected]; sampleUpdating = false;
         }
         void LoadSample(int part, string path, bool saveSelection) {
+            if (!SampleLibrary.Matches(part,path,settings.SampleFolder)) { Report("Choose a matching sound", "This sample belongs to a different instrument. Choose a " + Kit.Names[part] + " sound instead."); return; }
             if (smoke) { if (saveSelection) settings.SampleFiles[part] = path; return; }
             int version = Interlocked.Increment(ref sampleVersions[part]); sampleStates[part] = "Loading sample…";
             if (part == selected) Get<TextBlock>("SampleStatus").Text = sampleStates[part];
@@ -144,6 +139,7 @@ namespace Pulse {
             settings.Pads = preset.Pads; settings.Inputs = preset.Inputs; settings.InstrumentNotes = preset.InstrumentNotes; settings.SampleFiles = preset.SampleFiles;
             settings.Channel = preset.Channel; settings.Volume = preset.Volume; settings.Sound = preset.Sound; settings.MidiEnabled = preset.MidiEnabled;
             settings.Transpose = preset.Transpose; settings.NoteOffMs = preset.NoteOffMs;
+            FixSampleTypes();
             // Keep this PC's device identity, sample library root and chosen MIDI port.
             for (int i = 0; i < 8; i++) {
                 string path = settings.SampleFiles[i];
@@ -156,6 +152,13 @@ namespace Pulse {
             Get<ComboBox>("RouteCombo").SelectedIndex = settings.Sound ? settings.MidiEnabled ? 2 : 0 : 1;
             Get<CheckBox>("SoundToggle").IsChecked = settings.Sound; updating = false;
             midi.Panic(); if (audio != null) audio.Panic(); lastMidiScan = -10000; Changed(true); SelectPad(selected);
+        }
+        void FixSampleTypes() {
+            string[] defaults = SampleLibrary.Preset(library,2); bool changed = false;
+            for (int i = 0; i < 8; i++) if (!SampleLibrary.Matches(i,settings.SampleFiles[i],settings.SampleFolder)) {
+                settings.SampleFiles[i] = defaults[i]; changed = true; logs.Enqueue("Replaced mismatched " + Kit.Names[i] + " sample with its matching default.");
+            }
+            if (changed) Changed(false);
         }
         void Report(string title, string message) { logs.Enqueue(title + ": " + message); if (!smoke) MessageBox.Show(Window,message,title,MessageBoxButton.OK,MessageBoxImage.Information); }
     }
