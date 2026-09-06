@@ -1,0 +1,4 @@
+bin/
+artifacts/*.log
+artifacts/*.xml
+*.user
