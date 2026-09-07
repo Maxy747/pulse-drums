@@ -1,4 +1,11 @@
-Pulse 2.1.2 — overall output gain.
+Pulse 2.2.0 — player-perspective stereo kit.
+
+- Every drum now has a stereo position derived from its place in the kit layout, including centred kick, left hi-hat/crash/snare/low tom and right mid tom/floor tom/ride.
+- Player stereo toggle and 0–100% width slider; enabled at full width by default and saved in presets.
+- Per-instrument positioning follows learned mappings, works on Windows and ASIO, and feeds the existing reverb. Off/zero width preserves original WAV channels. MIDI remains unchanged.
+- Verified channel direction and panning power for all eight instruments, original-channel bypass, actual mixer routing and WPF controls.
+
+Retained from 2.1.2:
 
 - Overall gain slider in the Output panel adds 0 to +18 dB to drums and reverb on Windows and ASIO output.
 - Gain changes are smoothed and overload protection remains active. The setting is saved on this PC and in named presets; MIDI remains unchanged.

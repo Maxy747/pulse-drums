@@ -20,6 +20,13 @@ namespace Pulse {
         bool sampleUpdating;
         Pad SelectedPad { get { return settings.Pads[settings.Inputs[selected]]; } }
         void BuildKitControls() {
+            Get<CheckBox>("PlayerStereoToggle").IsChecked = settings.PlayerStereoEnabled;
+            Get<Slider>("StereoWidthSlider").Value = settings.PlayerStereoWidth*100;
+            Get<Slider>("StereoWidthSlider").IsEnabled = settings.PlayerStereoEnabled;
+            Get<TextBlock>("StereoWidthValue").Text = Math.Round(settings.PlayerStereoWidth*100) + "%";
+            RoutedEventHandler stereoToggle = delegate { if (updating) return; settings.PlayerStereoEnabled = Get<CheckBox>("PlayerStereoToggle").IsChecked == true; Get<Slider>("StereoWidthSlider").IsEnabled = settings.PlayerStereoEnabled; Changed(false); };
+            Get<CheckBox>("PlayerStereoToggle").Checked += stereoToggle; Get<CheckBox>("PlayerStereoToggle").Unchecked += stereoToggle;
+            Get<Slider>("StereoWidthSlider").ValueChanged += delegate { if (updating) return; settings.PlayerStereoWidth = Get<Slider>("StereoWidthSlider").Value/100; Get<TextBlock>("StereoWidthValue").Text = Math.Round(settings.PlayerStereoWidth*100) + "%"; Changed(false); };
             Get<Slider>("OutputGainSlider").Value = settings.OutputGainDb;
             Get<TextBlock>("OutputGainValue").Text = "+" + settings.OutputGainDb.ToString("0.0") + " dB";
             Get<Slider>("OutputGainSlider").ValueChanged += delegate { if (updating) return; settings.OutputGainDb = Get<Slider>("OutputGainSlider").Value; Get<TextBlock>("OutputGainValue").Text = "+" + settings.OutputGainDb.ToString("0.0") + " dB"; Changed(false); };
@@ -104,6 +111,7 @@ namespace Pulse {
         void RestartAudio() {
             if (smoke || audio == null || exiting) return;
             var replacement = new AudioEngine(); replacement.Volume = (float)settings.Volume; replacement.OutputGain = (float)Math.Pow(10,settings.OutputGainDb/20); replacement.ReverbEnabled = settings.ReverbEnabled; replacement.ReverbAmount = (float)settings.ReverbAmount;
+            replacement.ConfigureStereo(settings.PlayerStereoEnabled,settings.PlayerStereoWidth);
             var previous = audio; previous.CopySamplesTo(replacement); audio = null; previous.Dispose();
             audio = replacement; if (settings.Sound) replacement.Start(settings.AsioDriver); else replacement.OutputStatus = "Audio released · MIDI only"; reportedAudioUnderruns = 0;
             Get<Button>("AsioPanelButton").IsEnabled = replacement.Asio != null;
@@ -194,6 +202,7 @@ namespace Pulse {
             settings.Channel = preset.Channel; settings.Volume = preset.Volume; settings.Sound = preset.Sound; settings.MidiEnabled = preset.MidiEnabled;
             settings.ReverbEnabled = preset.ReverbEnabled; settings.ReverbAmount = preset.ReverbAmount;
             settings.OutputGainDb = preset.OutputGainDb;
+            settings.PlayerStereoEnabled = preset.PlayerStereoEnabled; settings.PlayerStereoWidth = preset.PlayerStereoWidth;
             settings.Transpose = preset.Transpose; settings.NoteOffMs = preset.NoteOffMs;
             settings.CrosstalkPercent = preset.CrosstalkPercent; settings.ProtectionDefaultsApplied = true; triggerFilter.Clear(); Get<Slider>("CrosstalkSlider").Value = settings.CrosstalkPercent;
             FixSampleTypes();
@@ -204,6 +213,7 @@ namespace Pulse {
                 LoadSample(i,settings.SampleFiles[i],false);
             }
             settings.SampleDefaultsApplied = true; updating = true;
+            Get<CheckBox>("PlayerStereoToggle").IsChecked = settings.PlayerStereoEnabled; Get<Slider>("StereoWidthSlider").Value = settings.PlayerStereoWidth*100; Get<Slider>("StereoWidthSlider").IsEnabled = settings.PlayerStereoEnabled; Get<TextBlock>("StereoWidthValue").Text = Math.Round(settings.PlayerStereoWidth*100) + "%";
             Get<Slider>("OutputGainSlider").Value = settings.OutputGainDb; Get<TextBlock>("OutputGainValue").Text = "+" + settings.OutputGainDb.ToString("0.0") + " dB";
             Get<CheckBox>("ReverbToggle").IsChecked = settings.ReverbEnabled; Get<Slider>("ReverbSlider").Value = settings.ReverbAmount*100; Get<Slider>("ReverbSlider").IsEnabled = settings.ReverbEnabled; Get<TextBlock>("ReverbValue").Text = Math.Round(settings.ReverbAmount*100) + "%";
             Get<ComboBox>("ChannelCombo").SelectedItem = settings.Channel; Get<Slider>("VolumeSlider").Value = settings.Volume * 100;

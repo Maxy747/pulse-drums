@@ -116,7 +116,7 @@ namespace Pulse {
                 }
                 if (!args.Contains("--no-audio")) using (var audio = new AudioEngine()) { audio.Start(); Thread.Sleep(250); Check(audio.Error == "", "Native waveOut initialization: " + audio.Error); }
                 if (args.Contains("--audio-stress")) using (var audio = new AudioEngine()) {
-                    audio.Volume = .05f; audio.ReverbEnabled = true; audio.ReverbAmount = 1; audio.Start();
+                    audio.Volume = .05f; audio.ReverbEnabled = true; audio.ReverbAmount = 1; audio.ConfigureStereo(true,1); audio.Start();
                     var watch = System.Diagnostics.Stopwatch.StartNew();
                     while (watch.ElapsedMilliseconds < 8000) {
                         for (int part = 0; part < 8; part++) audio.Hit(part,100);
@@ -127,6 +127,22 @@ namespace Pulse {
                     Check(audio.Error == "" && audio.RenderedBlocks > 1000 && audio.Underruns == 0,"Eight-second polyphony / allocation stress without empty queues");
                 }
                 var room = new RoomReverb(); double tail = 0, lateTail = 0, stereoDifference = 0;
+                var stage = new PlayerStereo(); stage.Configure(true,1); for (int i = 0; i < 2048; i++) stage.Step();
+                for (int part = 0; part < 8; part++) {
+                    double l = .25, r = .25; stage.Process(part,ref l,ref r);
+                    Check(PlayerStereo.Positions[part] < 0 ? l > r : PlayerStereo.Positions[part] > 0 ? r > l : l == r,"Player perspective direction for " + Kit.Names[part]);
+                    Check(Math.Abs(l*l+r*r-.125) < .000001,"Pan keeps mono source power for " + Kit.Names[part]);
+                }
+                stage.Configure(false,1); for (int i = 0; i < 2048; i++) stage.Step();
+                double originalL = .31, originalR = -.17; stage.Process(0,ref originalL,ref originalR);
+                Check(originalL == .31 && originalR == -.17,"Stereo toggle off preserves original channels");
+                stage.Configure(true,0); for (int i = 0; i < 2048; i++) stage.Step(); stage.Process(7,ref originalL,ref originalR);
+                Check(originalL == .31 && originalR == -.17,"Zero stereo width preserves original channels");
+                using (var positioned = new AudioEngine()) {
+                    positioned.ConfigureStereo(true,1); var settle = new short[4096]; positioned.MixBlock(settle);
+                    positioned.SetSample(7,Enumerable.Repeat(.1f,4096).ToArray()); positioned.Hit(7,100); positioned.MixBlock(settle);
+                    Check(settle[1] > settle[0],"Mixer uses instrument identity for ride placement");
+                }
                 using (var boosted = new AudioEngine()) {
                     boosted.Volume = 1; boosted.OutputGain = 2; boosted.SetSample(0,Enumerable.Repeat(.1f,24000).ToArray()); boosted.Hit(0,127);
                     var block = new short[22000]; boosted.MixBlock(block);

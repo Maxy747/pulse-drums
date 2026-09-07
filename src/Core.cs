@@ -23,6 +23,8 @@ namespace Pulse {
         public Pad[] Pads { get; set; }
         public double Volume { get; set; }
         public double OutputGainDb { get; set; }
+        public bool PlayerStereoEnabled { get; set; }
+        public double PlayerStereoWidth { get; set; }
         public bool ReverbEnabled { get; set; }
         public double ReverbAmount { get; set; }
         public bool Sound { get; set; }
@@ -45,12 +47,14 @@ namespace Pulse {
         public int Transpose { get; set; }
         public int NoteOffMs { get; set; }
         public Settings() {
+            PlayerStereoEnabled = true; PlayerStereoWidth = 1;
             ReverbAmount = .25;
             Pads = Enumerable.Range(0,8).Select(i => new Pad { Note = Protocol.Notes[i], Hit = Kit.TriggerDefaults[i], Reset = Kit.ResetDefaults[i], Gain = 1, Curve = .6, VelocityFloor = 50, RetriggerMs = 0 }).ToArray();
             Volume = .7; Sound = true; MinimizeToTray = true; Port = ""; DeviceId = ""; MidiOutput = ""; Channel = 1; MidiEnabled = true; NoteOffMs = 10;
         }
         public Settings Copy() { var s = (Settings)MemberwiseClone(); s.Pads = Pads.Select(p => p.Copy()).ToArray(); s.Inputs = Inputs == null ? null : (int[])Inputs.Clone(); s.InstrumentNotes = InstrumentNotes == null ? null : (int[])InstrumentNotes.Clone(); s.SampleFiles = SampleFiles == null ? null : (string[])SampleFiles.Clone(); return s; }
         public void Normalize() {
+            PlayerStereoWidth = Clamp(PlayerStereoWidth,0,1);
             OutputGainDb = Clamp(OutputGainDb,0,18);
             ReverbAmount = Clamp(ReverbAmount,0,1);
             AsioDriver = AsioDriver ?? ""; CrosstalkPercent = Math.Max(0,Math.Min(70,CrosstalkPercent));

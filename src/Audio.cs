@@ -17,7 +17,10 @@ namespace Pulse {
         [DllImport("winmm.dll")] static extern uint waveOutClose(IntPtr device);
         [DllImport("avrt.dll", CharSet = CharSet.Unicode)] static extern IntPtr AvSetMmThreadCharacteristics(string taskName, ref uint taskIndex);
         [DllImport("avrt.dll")] static extern bool AvRevertMmThreadCharacteristics(IntPtr handle);
-        class Voice { public float[] Sample; public int Position; public float Gain; }
+        class Voice { public float[] Sample; public int Position, Part; public float Gain; }
+        readonly PlayerStereo spatial = new PlayerStereo();
+        bool spatialEnabled; double spatialWidth;
+        public void ConfigureStereo(bool enabled, double width) { lock (gate) { if (enabled == spatialEnabled && width == spatialWidth) return; spatialEnabled = enabled; spatialWidth = width; spatial.Configure(enabled,width); } }
         public const int Rate = 48000;
         const int Block = 256, Buffers = 6;
         public int Underruns;
@@ -81,16 +84,17 @@ namespace Pulse {
                 worker = new Thread(Pump) { IsBackground = true, Priority = ThreadPriority.AboveNormal, Name = "Pulse audio" }; worker.Start();
             } catch (Exception e) { Error = e.Message; Release(); }
         }
-        public void Hit(int pad, int velocity) { lock (gate) { if (voices.Count >= 48) voices.RemoveAt(0); voices.Add(new Voice { Sample = samples[pad], Gain = velocity / 127f }); } }
+        public void Hit(int pad, int velocity) { lock (gate) { if (voices.Count >= 48) voices.RemoveAt(0); voices.Add(new Voice { Sample = samples[pad], Part = pad, Gain = velocity / 127f }); } }
         public void Panic() { lock (gate) { voices.Clear(); reverb.Clear(); limiterGain = 1; } }
         internal void MixBlock(short[] output, int length = -1) {
             if (length < 0) length = output.Length;
             lock (gate) {
                 for (int i = 0; i < length; i += 2) {
                     double left = 0, right = 0;
+                    spatial.Step();
                     foreach (var v in voices) if (v.Position + 1 < v.Sample.Length) {
-                        left += v.Sample[v.Position++] * v.Gain;
-                        right += v.Sample[v.Position++] * v.Gain;
+                        double l = v.Sample[v.Position++] * v.Gain, r = v.Sample[v.Position++] * v.Gain;
+                        spatial.Process(v.Part,ref l,ref r); left += l; right += r;
                     }
                     reverb.Process(ref left,ref right,ReverbAmount,ReverbEnabled);
                     // Clean headroom; stereo-linked protection acts only on overloads.
