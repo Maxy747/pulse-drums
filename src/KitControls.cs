@@ -20,6 +20,13 @@ namespace Pulse {
         bool sampleUpdating;
         Pad SelectedPad { get { return settings.Pads[settings.Inputs[selected]]; } }
         void BuildKitControls() {
+            Get<CheckBox>("ReverbToggle").IsChecked = settings.ReverbEnabled;
+            Get<Slider>("ReverbSlider").Value = settings.ReverbAmount*100;
+            Get<Slider>("ReverbSlider").IsEnabled = settings.ReverbEnabled;
+            Get<TextBlock>("ReverbValue").Text = Math.Round(settings.ReverbAmount*100) + "%";
+            RoutedEventHandler toggleReverb = delegate { if (updating) return; settings.ReverbEnabled = Get<CheckBox>("ReverbToggle").IsChecked == true; Get<Slider>("ReverbSlider").IsEnabled = settings.ReverbEnabled; Changed(false); };
+            Get<CheckBox>("ReverbToggle").Checked += toggleReverb; Get<CheckBox>("ReverbToggle").Unchecked += toggleReverb;
+            Get<Slider>("ReverbSlider").ValueChanged += delegate { if (updating) return; settings.ReverbAmount = Get<Slider>("ReverbSlider").Value/100; Get<TextBlock>("ReverbValue").Text = Math.Round(settings.ReverbAmount*100) + "%"; Changed(false); };
             var outputs = Get<ComboBox>("AudioDeviceCombo"); outputs.Items.Add("Windows default output");
             if (!smoke) try { foreach (string driver in AsioOutput.Drivers()) outputs.Items.Add(driver); } catch (Exception e) { logs.Enqueue("ASIO discovery: " + e.Message); }
             if (settings.AsioDriver != "" && !outputs.Items.Contains(settings.AsioDriver)) outputs.Items.Add(settings.AsioDriver);
@@ -93,7 +100,7 @@ namespace Pulse {
         void AcceptTrigger(Frame frame) { if (learning || exiting) return; int part = live.PartForInput(frame.Index); if (part >= 0) Hit(part,frame.Value,false); }
         void RestartAudio() {
             if (smoke || audio == null || exiting) return;
-            var replacement = new AudioEngine(); replacement.Volume = (float)settings.Volume;
+            var replacement = new AudioEngine(); replacement.Volume = (float)settings.Volume; replacement.ReverbEnabled = settings.ReverbEnabled; replacement.ReverbAmount = (float)settings.ReverbAmount;
             var previous = audio; previous.CopySamplesTo(replacement); audio = null; previous.Dispose();
             audio = replacement; if (settings.Sound) replacement.Start(settings.AsioDriver); else replacement.OutputStatus = "Audio released · MIDI only"; reportedAudioUnderruns = 0;
             Get<Button>("AsioPanelButton").IsEnabled = replacement.Asio != null;
@@ -182,6 +189,7 @@ namespace Pulse {
             EndLearn(false); preset.Normalize();
             settings.Pads = preset.Pads; settings.Inputs = preset.Inputs; settings.InstrumentNotes = preset.InstrumentNotes; settings.SampleFiles = preset.SampleFiles;
             settings.Channel = preset.Channel; settings.Volume = preset.Volume; settings.Sound = preset.Sound; settings.MidiEnabled = preset.MidiEnabled;
+            settings.ReverbEnabled = preset.ReverbEnabled; settings.ReverbAmount = preset.ReverbAmount;
             settings.Transpose = preset.Transpose; settings.NoteOffMs = preset.NoteOffMs;
             settings.CrosstalkPercent = preset.CrosstalkPercent; settings.ProtectionDefaultsApplied = true; triggerFilter.Clear(); Get<Slider>("CrosstalkSlider").Value = settings.CrosstalkPercent;
             FixSampleTypes();
@@ -192,6 +200,7 @@ namespace Pulse {
                 LoadSample(i,settings.SampleFiles[i],false);
             }
             settings.SampleDefaultsApplied = true; updating = true;
+            Get<CheckBox>("ReverbToggle").IsChecked = settings.ReverbEnabled; Get<Slider>("ReverbSlider").Value = settings.ReverbAmount*100; Get<Slider>("ReverbSlider").IsEnabled = settings.ReverbEnabled; Get<TextBlock>("ReverbValue").Text = Math.Round(settings.ReverbAmount*100) + "%";
             Get<ComboBox>("ChannelCombo").SelectedItem = settings.Channel; Get<Slider>("VolumeSlider").Value = settings.Volume * 100;
             Get<ComboBox>("TransposeCombo").SelectedItem = settings.Transpose; Get<Slider>("LengthSlider").Value = settings.NoteOffMs; Get<TextBlock>("LengthValue").Text = settings.NoteOffMs.ToString();
             Get<ComboBox>("RouteCombo").SelectedIndex = settings.Sound ? settings.MidiEnabled ? 2 : 0 : 1;

@@ -35,6 +35,9 @@ namespace Pulse {
         IntPtr device;
         Thread worker;
         double limiterGain = 1;
+        readonly RoomReverb reverb = new RoomReverb();
+        public volatile bool ReverbEnabled;
+        public volatile float ReverbAmount = .25f;
         public AsioOutput Asio;
         public string OutputStatus = "Windows default · 32 ms buffer";
         public void CopySamplesTo(AudioEngine target) { lock (gate) for (int i = 0; i < 8; i++) target.SetSample(i,samples[i]); }
@@ -77,7 +80,7 @@ namespace Pulse {
             } catch (Exception e) { Error = e.Message; Release(); }
         }
         public void Hit(int pad, int velocity) { lock (gate) { if (voices.Count >= 48) voices.RemoveAt(0); voices.Add(new Voice { Sample = samples[pad], Gain = velocity / 127f }); } }
-        public void Panic() { lock (gate) voices.Clear(); }
+        public void Panic() { lock (gate) { voices.Clear(); reverb.Clear(); limiterGain = 1; } }
         internal void MixBlock(short[] output, int length = -1) {
             if (length < 0) length = output.Length;
             lock (gate) {
@@ -87,6 +90,7 @@ namespace Pulse {
                         left += v.Sample[v.Position++] * v.Gain;
                         right += v.Sample[v.Position++] * v.Gain;
                     }
+                    reverb.Process(ref left,ref right,ReverbAmount,ReverbEnabled);
                     // Clean headroom; stereo-linked protection acts only on overloads.
                     left *= Volume * .65; right *= Volume * .65;
                     double peak = Math.Max(Math.Abs(left), Math.Abs(right));

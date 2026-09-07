@@ -1,4 +1,9 @@
-Pulse 2.1.0 — direct ASIO output and cleaner drum triggering.
+Pulse 2.1.1 — adjustable stereo reverb.
+
+- Reverb on/off toggle and 0–100% amount slider in the Output panel, remembered across launches and named presets.
+- Damped stereo room ambience works on Windows and ASIO output, with smooth changes and immediate tail clearing on Silence all. Reverb starts off; MIDI output is unchanged.
+
+Retained from 2.1.0:
 
 - Direct stereo ASIO output, including Focusrite USB ASIO for Scarlett. Driver selection persists; ASIO settings and Restart audio are available in the output panel. MIDI-only mode releases the audio driver for Ableton.
 - Ringing protection filters repeated events before session counting, samples and MIDI. Crosstalk protection compares raw sensor peaks and rejects weaker neighbouring vibrations.

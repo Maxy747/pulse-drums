@@ -86,7 +86,8 @@ namespace Pulse {
                 string folder = Path.Combine(Path.GetTempPath(), "pulse-tests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(folder);
                 try {
                     string path = Path.Combine(folder,"settings.xml"), warning;
-                    s.ThemeName = "Blue"; s.AsioDriver = "Focusrite USB ASIO"; s.CrosstalkPercent = 45; s.Pads[4].VelocityFloor = 50; SettingsStore.Save(s,path); var loaded = SettingsStore.Load(path,out warning);
+                    s.ThemeName = "Blue"; s.AsioDriver = "Focusrite USB ASIO"; s.CrosstalkPercent = 45; s.ReverbEnabled = true; s.ReverbAmount = .37; s.Pads[4].VelocityFloor = 50; SettingsStore.Save(s,path); var loaded = SettingsStore.Load(path,out warning);
+                    Check(loaded.ReverbEnabled && loaded.ReverbAmount == .37,"Reverb toggle and amount persist");
                     Check(loaded.AsioDriver == s.AsioDriver && loaded.CrosstalkPercent == 45,"ASIO selection and crosstalk persist");
                     Check(loaded.ThemeName == "Blue", "Theme survives restart");
                     Check(loaded.Pads[4].VelocityFloor == 50 && warning == "", "Settings persistence");
@@ -115,7 +116,7 @@ namespace Pulse {
                 }
                 if (!args.Contains("--no-audio")) using (var audio = new AudioEngine()) { audio.Start(); Thread.Sleep(250); Check(audio.Error == "", "Native waveOut initialization: " + audio.Error); }
                 if (args.Contains("--audio-stress")) using (var audio = new AudioEngine()) {
-                    audio.Volume = .05f; audio.Start();
+                    audio.Volume = .05f; audio.ReverbEnabled = true; audio.ReverbAmount = 1; audio.Start();
                     var watch = System.Diagnostics.Stopwatch.StartNew();
                     while (watch.ElapsedMilliseconds < 8000) {
                         for (int part = 0; part < 8; part++) audio.Hit(part,100);
@@ -124,6 +125,20 @@ namespace Pulse {
                     }
                     Console.WriteLine("Audio stress: blocks=" + audio.RenderedBlocks + ", empty queues=" + audio.Underruns + ", max service gap=" + audio.MaxServiceGapMs + " ms, MMCSS=" + audio.PriorityScheduled);
                     Check(audio.Error == "" && audio.RenderedBlocks > 1000 && audio.Underruns == 0,"Eight-second polyphony / allocation stress without empty queues");
+                }
+                var room = new RoomReverb(); double tail = 0, lateTail = 0, stereoDifference = 0;
+                for (int i = 0; i < AudioEngine.Rate*4; i++) {
+                    double l = i == 0 ? 1 : 0, r = l; room.Process(ref l,ref r,1,true);
+                    if (i > 1000 && i < AudioEngine.Rate) { tail += l*l+r*r; stereoDifference += Math.Abs(l-r); }
+                    if (i > AudioEngine.Rate*3) lateTail += l*l+r*r;
+                }
+                Check(tail > .001 && stereoDifference > .01 && lateTail < tail*.01,"Reverb creates a stereo tail that decays");
+                for (int i = 0; i < AudioEngine.Rate; i++) { double l = 0, r = 0; room.Process(ref l,ref r,1,false); }
+                double dryL = .25, dryR = -.125; room.Process(ref dryL,ref dryR,1,false);
+                Check(dryL == .25 && dryR == -.125,"Disabled reverb returns unchanged dry signal");
+                using (var wetMixer = new AudioEngine()) {
+                    wetMixer.ReverbEnabled = true; wetMixer.ReverbAmount = 1; wetMixer.Hit(0,127); var block = new short[48000]; wetMixer.MixBlock(block); wetMixer.Panic(); wetMixer.MixBlock(block);
+                    Check(block.All(v => v == 0),"Silence all clears the reverb tail");
                 }
                 using (var midi = new Midi()) { Check(midi.Ensure("") == "MIDI off", "Optional MIDI without a loopback driver"); midi.Panic(); }
                 var library = SampleLibrary.Scan(Path.Combine(SettingsStore.Folder,"Samples","GSCW"));

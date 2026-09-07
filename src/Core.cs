@@ -22,6 +22,8 @@ namespace Pulse {
     public class Settings {
         public Pad[] Pads { get; set; }
         public double Volume { get; set; }
+        public bool ReverbEnabled { get; set; }
+        public double ReverbAmount { get; set; }
         public bool Sound { get; set; }
         public bool MinimizeToTray { get; set; }
         public string Port { get; set; }
@@ -42,11 +44,13 @@ namespace Pulse {
         public int Transpose { get; set; }
         public int NoteOffMs { get; set; }
         public Settings() {
+            ReverbAmount = .25;
             Pads = Enumerable.Range(0,8).Select(i => new Pad { Note = Protocol.Notes[i], Hit = Kit.TriggerDefaults[i], Reset = Kit.ResetDefaults[i], Gain = 1, Curve = .6, VelocityFloor = 50, RetriggerMs = 0 }).ToArray();
             Volume = .7; Sound = true; MinimizeToTray = true; Port = ""; DeviceId = ""; MidiOutput = ""; Channel = 1; MidiEnabled = true; NoteOffMs = 10;
         }
         public Settings Copy() { var s = (Settings)MemberwiseClone(); s.Pads = Pads.Select(p => p.Copy()).ToArray(); s.Inputs = Inputs == null ? null : (int[])Inputs.Clone(); s.InstrumentNotes = InstrumentNotes == null ? null : (int[])InstrumentNotes.Clone(); s.SampleFiles = SampleFiles == null ? null : (string[])SampleFiles.Clone(); return s; }
         public void Normalize() {
+            ReverbAmount = Clamp(ReverbAmount,0,1);
             AsioDriver = AsioDriver ?? ""; CrosstalkPercent = Math.Max(0,Math.Min(70,CrosstalkPercent));
             if (ThemeName != "Red" && ThemeName != "Blue") ThemeName = "Green";
             if (Pads == null || Pads.Length != 8) Pads = new Settings().Pads;

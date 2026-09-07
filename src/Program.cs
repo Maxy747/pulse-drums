@@ -93,7 +93,7 @@ namespace Pulse {
                     var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
                     t.Tick += delegate { t.Stop(); Smoke(); }; t.Start(); return;
                 }
-                audio = new AudioEngine(); audio.Volume = (float)settings.Volume; if (settings.Sound) audio.Start(settings.AsioDriver); else audio.OutputStatus = "Audio released · MIDI only";
+                audio = new AudioEngine(); audio.Volume = (float)settings.Volume; audio.ReverbEnabled = settings.ReverbEnabled; audio.ReverbAmount = (float)settings.ReverbAmount; if (settings.Sound) audio.Start(settings.AsioDriver); else audio.OutputStatus = "Audio released · MIDI only";
                 Get<Button>("AsioPanelButton").IsEnabled = audio.Asio != null;
                 StartSampleLibrary();
                 connection = new DrumConnection(settings);
@@ -210,7 +210,7 @@ namespace Pulse {
         }
         void Changed(bool thresholds) {
             settings.Normalize(); live = settings.Copy(); dirty = true; saveAt = clock.ElapsedMilliseconds + 450;
-            if (audio != null) audio.Volume = (float)settings.Volume;
+            if (audio != null) { audio.Volume = (float)settings.Volume; audio.ReverbEnabled = settings.ReverbEnabled; audio.ReverbAmount = (float)settings.ReverbAmount; }
             if (connection != null) connection.Configure(settings, thresholds);
             Get<TextBlock>("SaveStatus").Text = "Saving settings…";
         }
@@ -346,6 +346,11 @@ namespace Pulse {
                 Get<ComboBox>("AudioDeviceCombo").Items.Add("Focusrite USB ASIO"); Get<ComboBox>("AudioDeviceCombo").SelectedItem = "Focusrite USB ASIO";
                 if (settings.AsioDriver != "Focusrite USB ASIO") throw new Exception("Output selection failed");
                 Screenshot(System.IO.Path.Combine(folder,"pulse-asio-controls.png"));
+                Get<CheckBox>("ReverbToggle").IsChecked = true; Get<Slider>("ReverbSlider").Value = 42;
+                if (!settings.ReverbEnabled || settings.ReverbAmount != .42 || !Get<Slider>("ReverbSlider").IsEnabled) throw new Exception("Reverb controls failed");
+                Screenshot(System.IO.Path.Combine(folder,"pulse-reverb.png"));
+                Get<CheckBox>("ReverbToggle").IsChecked = false;
+                if (settings.ReverbEnabled || Get<Slider>("ReverbSlider").IsEnabled) throw new Exception("Reverb off failed");
                 File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"PASS: green/red/blue themes, kit/classic views, isolated hit glow, sliders, audition, calibrated reset, MIDI note mapping, learn cancel, all-eight assignment, undo after completion, repeated undo, preset restore. No hardware or user settings writes.");
             } catch (Exception e) { File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"FAIL: " + e); Environment.ExitCode = 1; }
             exiting = true; Window.Close();
