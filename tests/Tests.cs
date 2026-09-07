@@ -43,6 +43,11 @@ namespace Pulse {
                 var commands = Protocol.Thresholds(new Settings());
                 Check(commands.Length == 16 && commands[0] == "SET,RESET,0,40\n" && commands[15] == "SET,HIT,7,10\n", "Calibrated firmware wire commands");
                 var calibrated = new Settings(); calibrated.Normalize();
+                var usbSettings = calibrated.Copy(); usbSettings.DeviceId = "USB\\VID_1A86\\SAVED";
+                Check(UsbLaunch.Matches(new PortInfo { Id = usbSettings.DeviceId, Name = "COM8" },usbSettings),"USB launch follows saved device across COM changes");
+                Check(!UsbLaunch.Matches(new PortInfo { Id = "USB\\VID_1A86\\OTHER", Name = "COM5", Candidate = true },usbSettings),"USB launch rejects unrelated adapter when device is known");
+                usbSettings.DeviceId = "";
+                Check(UsbLaunch.Matches(new PortInfo { Id = "USB\\VID_2341", Candidate = true },usbSettings) && !UsbLaunch.Matches(new PortInfo { Id = "USB\\MOUSE" },usbSettings),"USB first-run matching requires Arduino-compatible serial adapter");
                 var protectedSettings = calibrated.Copy(); Sensitivity.Apply(protectedSettings,"Medium");
                 var filter = new TriggerFilter(); var accepted = new List<Frame>();
                 for (int i = 0; i < 20; i++) { filter.Push(new Frame("HIT",1,100) { Peak = 300 },protectedSettings,1000+i*5); filter.Flush(protectedSettings,1000+i*5,accepted.Add); }

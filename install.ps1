@@ -1,4 +1,4 @@
-param([switch]$NoStartup, [switch]$NoLaunch, [switch]$ImportCurrentKit, [switch]$WithoutSamples)
+param([switch]$NoStartup, [switch]$NoLaunch, [switch]$ImportCurrentKit, [switch]$WithoutSamples, [switch]$EnableUsbLaunch)
 $ErrorActionPreference = 'Stop'
 $source = Join-Path $PSScriptRoot 'Pulse.exe'
 if (!(Test-Path -LiteralPath $source)) { $source = Join-Path $PSScriptRoot 'bin\Pulse.exe' }
@@ -10,6 +10,8 @@ New-Item -ItemType Directory -Force -Path $installFolder | Out-Null
 if (Test-Path -LiteralPath $exePath) {
     $runningPulse = Get-Process -Name Pulse -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exePath }
     if ($runningPulse) {
+        # Use the new build to stop the watcher, including when upgrading an older app.
+        Start-Process -FilePath $source -ArgumentList '--stop-usb-watch' -WindowStyle Hidden -Wait
         Start-Process -FilePath $exePath -ArgumentList '--exit' -WindowStyle Hidden -Wait
         foreach ($process in $runningPulse) { if (!$process.WaitForExit(8000)) { throw 'Exit Pulse from its tray menu, then run the installer again.' } }
     }
@@ -30,6 +32,10 @@ $shortcut.TargetPath = $exePath; $shortcut.WorkingDirectory = $installFolder; $s
 if (!$NoStartup) {
     New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'PulseDrums' -Value ('"' + $exePath + '" --background') -PropertyType String -Force | Out-Null
 }
-if (!$NoLaunch) { Start-Process -FilePath $exePath -WindowStyle Hidden }
+if ($EnableUsbLaunch) { New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'PulseDrumsUsbWatch' -Value ('"' + $exePath + '" --watch-usb') -PropertyType String -Force | Out-Null }
+if (!$NoLaunch) {
+    Start-Process -FilePath $exePath -WindowStyle Hidden
+    if ((Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'PulseDrumsUsbWatch' -ErrorAction SilentlyContinue)) { Start-Process -FilePath $exePath -ArgumentList '--watch-usb' -WindowStyle Hidden }
+}
 Write-Output "Installed: $exePath"
 Write-Output 'Open Pulse from the Start menu. Launch with Windows can be changed inside the app.'

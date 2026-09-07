@@ -31,6 +31,8 @@ namespace Pulse {
         }
         public static void EnsureDependencies() { }
         [STAThread] public static int Main(string[] args) {
+            if (args.Contains("--watch-usb")) return UsbLaunch.Run();
+            if (args.Contains("--stop-usb-watch")) { UsbLaunch.Stop(); return 0; }
             if (args.Contains("--exit")) { try { using (var quit = EventWaitHandle.OpenExisting("Local\\PulseDrumsExit")) quit.Set(); return 0; } catch (WaitHandleCannotBeOpenedException) { return 0; } }
             bool smoke = args.Contains("--smoke");
             bool created;
@@ -155,6 +157,8 @@ namespace Pulse {
             Get<ComboBox>("PortCombo").Items.Add(new PortInfo { Name = "", Label = "Auto-detect Arduino", Id = "" }); Get<ComboBox>("PortCombo").SelectedIndex = 0;
             try { using (var key = Registry.CurrentUser.OpenSubKey("Software\\Microsoft\\Windows\\CurrentVersion\\Run")) Get<CheckBox>("StartupToggle").IsChecked = key != null && key.GetValue("PulseDrums") != null; } catch { }
             updating = false;
+            if (!smoke) try { Get<CheckBox>("UsbLaunchToggle").IsChecked = UsbLaunch.Enabled; if (UsbLaunch.Enabled) UsbLaunch.Start(); } catch (Exception e) { logs.Enqueue("USB launch: " + e.Message); }
+            Get<CheckBox>("UsbLaunchToggle").Click += delegate { if (smoke) return; try { UsbLaunch.SetEnabled(Get<CheckBox>("UsbLaunchToggle").IsChecked == true); } catch (Exception e) { Get<CheckBox>("UsbLaunchToggle").IsChecked = UsbLaunch.Enabled; logs.Enqueue("USB launch: " + e.Message); } };
             foreach (string name in new[] {"Threshold", "Reset", "Gain", "Floor", "Ceiling", "Curve", "Guard"}) Get<Slider>(name + "Slider").ValueChanged += delegate { if (!updating) PadChanged(); };
             Get<Slider>("VolumeSlider").ValueChanged += delegate { if (updating) return; settings.Volume = Get<Slider>("VolumeSlider").Value / 100; Get<TextBlock>("VolumeValue").Text = Math.Round(settings.Volume * 100) + "%"; Changed(false); };
             Get<CheckBox>("SoundToggle").Click += delegate { settings.Sound = Get<CheckBox>("SoundToggle").IsChecked == true; if (!settings.Sound && audio != null) audio.Panic(); Changed(false); };

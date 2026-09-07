@@ -1,4 +1,11 @@
-Pulse 2.2.0 — player-perspective stereo kit.
+Pulse 2.2.1 — launch on Arduino connection.
+
+- Launch when drums connect toggle starts a background USB watcher at sign-in, independent of the full app's Windows-startup preference.
+- The watcher uses Windows device notifications with short enumeration retries and a 30-second fallback scan; it does not open the audio engine or COM port.
+- Saved device identity prevents unrelated USB devices launching Pulse. Closing Pulse while the Arduino stays connected is respected until reconnection.
+- Installers stop the watcher before replacing the executable; disabling the toggle stops it and removes its sign-in entry.
+
+Retained from 2.2.0:
 
 - Every drum now has a stereo position derived from its place in the kit layout, including centred kick, left hi-hat/crash/snare/low tom and right mid tom/floor tom/ride.
 - Player stereo toggle and 0–100% width slider; enabled at full width by default and saved in presets.

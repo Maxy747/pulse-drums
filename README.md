@@ -103,6 +103,10 @@ On the first 2.1 launch, existing thresholds and mappings are retained, guards a
 
 ## Background operation
 
+**Launch when drums connect** enables a separate background watcher that starts at Windows sign-in. It waits for USB arrival/removal notifications, briefly retries while Windows enumerates the port, and has a 30-second fallback scan. It opens no audio device or serial port. The saved Arduino identity is used when available; before first verification, only compatible USB-serial candidates qualify. Connecting the kit launches Pulse if it is closed. Exiting Pulse while the kit remains connected does not immediately relaunch it; unplug/replug to launch again. The toggle removes its sign-in entry and stops the watcher. The installer option `-EnableUsbLaunch` enables it explicitly. `-NoLaunch` leaves both processes stopped during installation.
+
+This is separate from **Launch with Windows**, which starts the full drum app at sign-in. To run only the lightweight watcher until the kit connects, leave USB launch on and switch Launch with Windows off. USB enumeration and the Nano's boot still take time; the watcher cannot make an unready device connect instantly. Windows must be signed in.
+
 When **Keep playing in tray** is enabled, closing the window keeps the kit active. Use the tray icon's **Exit** to stop it. **Launch with Windows** starts Pulse in the tray. Opening it again brings the existing instance forward. **Silence all** stops active sample voices and MIDI notes.
 
 Diagnostics include USB state, sample load errors and MIDI availability. The bounded device log is saved in `%LOCALAPPDATA%\PulseDrums\device.log`.
