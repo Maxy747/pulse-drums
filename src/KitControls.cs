@@ -20,6 +20,9 @@ namespace Pulse {
         bool sampleUpdating;
         Pad SelectedPad { get { return settings.Pads[settings.Inputs[selected]]; } }
         void BuildKitControls() {
+            Get<Slider>("OutputGainSlider").Value = settings.OutputGainDb;
+            Get<TextBlock>("OutputGainValue").Text = "+" + settings.OutputGainDb.ToString("0.0") + " dB";
+            Get<Slider>("OutputGainSlider").ValueChanged += delegate { if (updating) return; settings.OutputGainDb = Get<Slider>("OutputGainSlider").Value; Get<TextBlock>("OutputGainValue").Text = "+" + settings.OutputGainDb.ToString("0.0") + " dB"; Changed(false); };
             Get<CheckBox>("ReverbToggle").IsChecked = settings.ReverbEnabled;
             Get<Slider>("ReverbSlider").Value = settings.ReverbAmount*100;
             Get<Slider>("ReverbSlider").IsEnabled = settings.ReverbEnabled;
@@ -100,7 +103,7 @@ namespace Pulse {
         void AcceptTrigger(Frame frame) { if (learning || exiting) return; int part = live.PartForInput(frame.Index); if (part >= 0) Hit(part,frame.Value,false); }
         void RestartAudio() {
             if (smoke || audio == null || exiting) return;
-            var replacement = new AudioEngine(); replacement.Volume = (float)settings.Volume; replacement.ReverbEnabled = settings.ReverbEnabled; replacement.ReverbAmount = (float)settings.ReverbAmount;
+            var replacement = new AudioEngine(); replacement.Volume = (float)settings.Volume; replacement.OutputGain = (float)Math.Pow(10,settings.OutputGainDb/20); replacement.ReverbEnabled = settings.ReverbEnabled; replacement.ReverbAmount = (float)settings.ReverbAmount;
             var previous = audio; previous.CopySamplesTo(replacement); audio = null; previous.Dispose();
             audio = replacement; if (settings.Sound) replacement.Start(settings.AsioDriver); else replacement.OutputStatus = "Audio released · MIDI only"; reportedAudioUnderruns = 0;
             Get<Button>("AsioPanelButton").IsEnabled = replacement.Asio != null;
@@ -190,6 +193,7 @@ namespace Pulse {
             settings.Pads = preset.Pads; settings.Inputs = preset.Inputs; settings.InstrumentNotes = preset.InstrumentNotes; settings.SampleFiles = preset.SampleFiles;
             settings.Channel = preset.Channel; settings.Volume = preset.Volume; settings.Sound = preset.Sound; settings.MidiEnabled = preset.MidiEnabled;
             settings.ReverbEnabled = preset.ReverbEnabled; settings.ReverbAmount = preset.ReverbAmount;
+            settings.OutputGainDb = preset.OutputGainDb;
             settings.Transpose = preset.Transpose; settings.NoteOffMs = preset.NoteOffMs;
             settings.CrosstalkPercent = preset.CrosstalkPercent; settings.ProtectionDefaultsApplied = true; triggerFilter.Clear(); Get<Slider>("CrosstalkSlider").Value = settings.CrosstalkPercent;
             FixSampleTypes();
@@ -200,6 +204,7 @@ namespace Pulse {
                 LoadSample(i,settings.SampleFiles[i],false);
             }
             settings.SampleDefaultsApplied = true; updating = true;
+            Get<Slider>("OutputGainSlider").Value = settings.OutputGainDb; Get<TextBlock>("OutputGainValue").Text = "+" + settings.OutputGainDb.ToString("0.0") + " dB";
             Get<CheckBox>("ReverbToggle").IsChecked = settings.ReverbEnabled; Get<Slider>("ReverbSlider").Value = settings.ReverbAmount*100; Get<Slider>("ReverbSlider").IsEnabled = settings.ReverbEnabled; Get<TextBlock>("ReverbValue").Text = Math.Round(settings.ReverbAmount*100) + "%";
             Get<ComboBox>("ChannelCombo").SelectedItem = settings.Channel; Get<Slider>("VolumeSlider").Value = settings.Volume * 100;
             Get<ComboBox>("TransposeCombo").SelectedItem = settings.Transpose; Get<Slider>("LengthSlider").Value = settings.NoteOffMs; Get<TextBlock>("LengthValue").Text = settings.NoteOffMs.ToString();

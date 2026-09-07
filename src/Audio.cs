@@ -35,6 +35,8 @@ namespace Pulse {
         IntPtr device;
         Thread worker;
         double limiterGain = 1;
+        double smoothGain = 1;
+        public volatile float OutputGain = 1;
         readonly RoomReverb reverb = new RoomReverb();
         public volatile bool ReverbEnabled;
         public volatile float ReverbAmount = .25f;
@@ -92,7 +94,8 @@ namespace Pulse {
                     }
                     reverb.Process(ref left,ref right,ReverbAmount,ReverbEnabled);
                     // Clean headroom; stereo-linked protection acts only on overloads.
-                    left *= Volume * .65; right *= Volume * .65;
+                    smoothGain += (OutputGain-smoothGain)*.002;
+                    left *= Volume * .65 * smoothGain; right *= Volume * .65 * smoothGain;
                     double peak = Math.Max(Math.Abs(left), Math.Abs(right));
                     double target = peak > .98 ? .98 / peak : 1;
                     limiterGain = target < limiterGain ? target : Math.Min(target, limiterGain + .0002);

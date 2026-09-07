@@ -127,6 +127,13 @@ namespace Pulse {
                     Check(audio.Error == "" && audio.RenderedBlocks > 1000 && audio.Underruns == 0,"Eight-second polyphony / allocation stress without empty queues");
                 }
                 var room = new RoomReverb(); double tail = 0, lateTail = 0, stereoDifference = 0;
+                using (var boosted = new AudioEngine()) {
+                    boosted.Volume = 1; boosted.OutputGain = 2; boosted.SetSample(0,Enumerable.Repeat(.1f,24000).ToArray()); boosted.Hit(0,127);
+                    var block = new short[22000]; boosted.MixBlock(block);
+                    Check(Math.Abs(block[21998] - .1*.65*2*32767) < 2,"Overall gain boosts quiet audio after smoothing");
+                    boosted.Panic(); boosted.OutputGain = 8; boosted.SetSample(0,Enumerable.Repeat(1f,24000).ToArray()); boosted.Hit(0,127); boosted.MixBlock(block);
+                    Check(block.All(v => v > 0 && v <= 32112),"Maximum gain remains inside PCM limits");
+                }
                 for (int i = 0; i < AudioEngine.Rate*4; i++) {
                     double l = i == 0 ? 1 : 0, r = l; room.Process(ref l,ref r,1,true);
                     if (i > 1000 && i < AudioEngine.Rate) { tail += l*l+r*r; stereoDifference += Math.Abs(l-r); }

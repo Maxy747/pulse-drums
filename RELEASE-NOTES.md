@@ -1,4 +1,9 @@
-Pulse 2.1.1 — adjustable stereo reverb.
+Pulse 2.1.2 — overall output gain.
+
+- Overall gain slider in the Output panel adds 0 to +18 dB to drums and reverb on Windows and ASIO output.
+- Gain changes are smoothed and overload protection remains active. The setting is saved on this PC and in named presets; MIDI remains unchanged.
+
+Retained from 2.1.1:
 
 - Reverb on/off toggle and 0–100% amount slider in the Output panel, remembered across launches and named presets.
 - Damped stereo room ambience works on Windows and ASIO output, with smooth changes and immediate tail clearing on Silence all. Reverb starts off; MIDI output is unchanged.

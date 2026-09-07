@@ -22,6 +22,7 @@ namespace Pulse {
     public class Settings {
         public Pad[] Pads { get; set; }
         public double Volume { get; set; }
+        public double OutputGainDb { get; set; }
         public bool ReverbEnabled { get; set; }
         public double ReverbAmount { get; set; }
         public bool Sound { get; set; }
@@ -50,6 +51,7 @@ namespace Pulse {
         }
         public Settings Copy() { var s = (Settings)MemberwiseClone(); s.Pads = Pads.Select(p => p.Copy()).ToArray(); s.Inputs = Inputs == null ? null : (int[])Inputs.Clone(); s.InstrumentNotes = InstrumentNotes == null ? null : (int[])InstrumentNotes.Clone(); s.SampleFiles = SampleFiles == null ? null : (string[])SampleFiles.Clone(); return s; }
         public void Normalize() {
+            OutputGainDb = Clamp(OutputGainDb,0,18);
             ReverbAmount = Clamp(ReverbAmount,0,1);
             AsioDriver = AsioDriver ?? ""; CrosstalkPercent = Math.Max(0,Math.Min(70,CrosstalkPercent));
             if (ThemeName != "Red" && ThemeName != "Blue") ThemeName = "Green";
