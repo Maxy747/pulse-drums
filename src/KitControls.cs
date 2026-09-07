@@ -20,12 +20,18 @@ namespace Pulse {
         bool sampleUpdating;
         Pad SelectedPad { get { return settings.Pads[settings.Inputs[selected]]; } }
         void BuildKitControls() {
-            var themes = Get<ComboBox>("ThemeCombo");
-            themes.ItemsSource = new[] { "Green", "Red", "Blue" }; themes.SelectedItem = settings.ThemeName;
-            themes.SelectionChanged += delegate {
-                settings.ThemeName = (string)themes.SelectedItem; Theme.Apply(settings.ThemeName);
-                if (kitView != null) kitView.InvalidateVisual(); Changed(false);
-            };
+            var outputs = Get<ComboBox>("AudioDeviceCombo"); outputs.Items.Add("Windows default output");
+            if (!smoke) try { foreach (string driver in AsioOutput.Drivers()) outputs.Items.Add(driver); } catch (Exception e) { logs.Enqueue("ASIO discovery: " + e.Message); }
+            if (settings.AsioDriver != "" && !outputs.Items.Contains(settings.AsioDriver)) outputs.Items.Add(settings.AsioDriver);
+            outputs.SelectedIndex = settings.AsioDriver == "" ? 0 : outputs.Items.IndexOf(settings.AsioDriver);
+            outputs.SelectionChanged += delegate { if (updating) return; settings.AsioDriver = outputs.SelectedIndex <= 0 ? "" : (string)outputs.SelectedItem; Changed(false); RestartAudio(); };
+            Get<Button>("AsioPanelButton").Click += delegate { if (audio != null && audio.Asio != null) try { audio.Asio.ControlPanel(); } catch (Exception e) { Report("ASIO settings",e.Message); } };
+            Get<Button>("AudioRetryButton").Click += delegate { RestartAudio(); };
+            foreach (string level in new[] { "High", "Medium", "Low" }) Get<Button>(level + "Sensitivity").Click += delegate { EndLearn(false); Sensitivity.Apply(settings,level); triggerFilter.Clear(); Changed(true); SelectPad(selected); Get<Slider>("CrosstalkSlider").Value = settings.CrosstalkPercent; Get<TextBlock>("LastHit").Text = level + " sensitivity applied to all eight inputs."; };
+            Get<Slider>("CrosstalkSlider").Value = settings.CrosstalkPercent;
+            Get<Slider>("CrosstalkSlider").ValueChanged += delegate { settings.CrosstalkPercent = (int)Get<Slider>("CrosstalkSlider").Value; Changed(false); };
+            foreach (string name in new[] { "Green", "Red", "Blue" }) Get<Button>(name + "ThemeButton").Click += delegate { SetTheme(name); };
+            SetTheme(settings.ThemeName);
             Get<ComboBox>("TransposeCombo").ItemsSource = Enumerable.Range(-48,97).ToArray(); Get<ComboBox>("TransposeCombo").SelectedItem = settings.Transpose;
             Get<ComboBox>("TransposeCombo").SelectionChanged += delegate { if (updating) return; settings.Transpose = (int)Get<ComboBox>("TransposeCombo").SelectedItem; midi.Panic(); Changed(false); };
             Get<Slider>("LengthSlider").Value = settings.NoteOffMs; Get<TextBlock>("LengthValue").Text = settings.NoteOffMs.ToString();
@@ -46,7 +52,7 @@ namespace Pulse {
             };
             var route = Get<ComboBox>("RouteCombo"); route.Items.Add("Samples · play through speakers"); route.Items.Add("Ableton / MIDI only"); route.Items.Add("Samples + MIDI");
             route.SelectedIndex = settings.MidiEnabled && settings.Sound ? 2 : settings.Sound ? 0 : 1;
-            route.SelectionChanged += delegate { if (updating) return; settings.Sound = route.SelectedIndex != 1; settings.MidiEnabled = route.SelectedIndex != 0; Get<CheckBox>("SoundToggle").IsChecked = settings.Sound; midi.Panic(); if (audio != null) audio.Panic(); lastMidiScan = -10000; Changed(false); };
+            route.SelectionChanged += delegate { if (updating) return; settings.Sound = route.SelectedIndex != 1; settings.MidiEnabled = route.SelectedIndex != 0; Get<CheckBox>("SoundToggle").IsChecked = settings.Sound; midi.Panic(); lastMidiScan = -10000; Changed(false); RestartAudio(); };
             Get<ComboBox>("KitPresetCombo").ItemsSource = new[] {"GSCW Kit 1", "GSCW Kit 2", "Pulse synth"}; Get<ComboBox>("KitPresetCombo").SelectedIndex = 1;
             Get<Button>("ApplyKitButton").Click += delegate { ApplySoundKit(Get<ComboBox>("KitPresetCombo").SelectedIndex); };
             Get<ComboBox>("SampleCombo").SelectionChanged += delegate { if (sampleUpdating) return; var choice = Get<ComboBox>("SampleCombo").SelectedItem as SampleChoice; if (choice != null) LoadSample(selected,choice.Path,true); };
@@ -63,8 +69,13 @@ namespace Pulse {
                 var dialog = new OpenFileDialog { Title = "Load a Pulse preset", Filter = "Pulse preset|*.pulse.xml;*.xml", InitialDirectory = Path.Combine(SettingsStore.Folder,"Presets") };
                 if (dialog.ShowDialog(Window) == true) try { string warning; var loaded = SettingsStore.Load(dialog.FileName,out warning); if (warning != "") throw new InvalidDataException(warning); ApplyPreset(loaded); } catch (Exception e) { Report("Could not load preset",e.Message); }
             };
-            Get<Button>("DefaultsButton").Click += delegate { EndLearn(false); settings.Pads = new Settings().Pads; settings.InstrumentNotes = (int[])Kit.Notes.Clone(); settings.Channel = 1; settings.Transpose = 0; settings.NoteOffMs = 10; Changed(true); SelectPad(selected); Get<ComboBox>("ChannelCombo").SelectedItem = 1; Get<ComboBox>("TransposeCombo").SelectedItem = 0; Get<Slider>("LengthSlider").Value = 10; Get<TextBlock>("LastHit").Text = "Your calibrated trigger and velocity defaults restored. Input assignments and sounds kept."; };
+            Get<Button>("DefaultsButton").Click += delegate { EndLearn(false); settings.Pads = new Settings().Pads; settings.InstrumentNotes = (int[])Kit.Notes.Clone(); settings.Channel = 1; settings.Transpose = 0; settings.NoteOffMs = 10; settings.CrosstalkPercent = 0; settings.ProtectionDefaultsApplied = true; triggerFilter.Clear(); Get<Slider>("CrosstalkSlider").Value = 0; Changed(true); SelectPad(selected); Get<ComboBox>("ChannelCombo").SelectedItem = 1; Get<ComboBox>("TransposeCombo").SelectedItem = 0; Get<Slider>("LengthSlider").Value = 10; Get<TextBlock>("LastHit").Text = "Your calibrated trigger and velocity defaults restored. Input assignments and sounds kept."; };
             SetView(settings.ClassicView);
+        }
+        void SetTheme(string name) {
+            settings.ThemeName = name; Theme.Apply(name);
+            foreach (string color in new[] { "Green", "Red", "Blue" }) Get<Button>(color + "ThemeButton").BorderBrush = color == name ? Brush("#EEF0E8") : System.Windows.Media.Brushes.Transparent;
+            if (kitView != null) kitView.InvalidateVisual(); Changed(false);
         }
         void SetView(bool classic) {
             settings.ClassicView = classic;
@@ -77,9 +88,19 @@ namespace Pulse {
         void ReceiveInput(Frame f) {
             if (learning) { if (f.Kind == "RAW") Enqueue(new Frame("LEARN",f.Index,f.Value)); return; }
             int part = live.PartForInput(f.Index); if (part < 0) return;
-            if (f.Kind == "HIT") Hit(part,f.Value,false); else if (f.Kind == "RAW") Enqueue(new Frame("RAW",part,f.Value));
+            if (f.Kind == "HIT") { if (smoke) Hit(part,f.Value,false); else { triggerFilter.Push(f,live,clock.ElapsedMilliseconds); triggerFilter.Flush(live,clock.ElapsedMilliseconds,AcceptTrigger); } } else if (f.Kind == "RAW") Enqueue(new Frame("RAW",part,f.Value));
+        }
+        void AcceptTrigger(Frame frame) { if (learning || exiting) return; int part = live.PartForInput(frame.Index); if (part >= 0) Hit(part,frame.Value,false); }
+        void RestartAudio() {
+            if (smoke || audio == null || exiting) return;
+            var replacement = new AudioEngine(); replacement.Volume = (float)settings.Volume;
+            var previous = audio; previous.CopySamplesTo(replacement); audio = null; previous.Dispose();
+            audio = replacement; if (settings.Sound) replacement.Start(settings.AsioDriver); else replacement.OutputStatus = "Audio released · MIDI only"; reportedAudioUnderruns = 0;
+            Get<Button>("AsioPanelButton").IsEnabled = replacement.Asio != null;
+            logs.Enqueue(replacement.Error == "" ? replacement.OutputStatus : replacement.Error);
         }
         void BeginLearn(bool all) {
+            triggerFilter.Clear();
             learnOriginal = (int[])settings.Inputs.Clone();
             learn = new LearnSession(settings.Inputs,selected,all,clock.ElapsedMilliseconds); learnPart = learn.Part; learning = true;
             midi.Panic(); if (audio != null) audio.Panic(); Frame f; while (frames.TryDequeue(out f)) { }
@@ -129,6 +150,7 @@ namespace Pulse {
             if (match == null) { match = new SampleChoice { Path = path, Label = Path.GetFileNameWithoutExtension(path) }; cb.Items.Add(match); }
             cb.SelectedItem = match; cb.ToolTip = path == "" ? "Built-in synthesized percussion" : path;
             Get<TextBlock>("SampleStatus").Text = sampleStates[selected]; sampleUpdating = false;
+            Get<TextBlock>("SampleCategoryHint").Text = selected == 2 ? "12-inch low tom · Kit 2 only; Kit 1 has no 12-inch recording." : selected == 4 ? "10-inch mid tom · both kits. Flam = recorded double strike." : selected == 6 ? "13-inch floor tom · both kits. Flam = recorded double strike." : "Matching sounds only";
         }
         void LoadSample(int part, string path, bool saveSelection) {
             if (!SampleLibrary.Matches(part,path,settings.SampleFolder)) { Report("Choose a matching sound", "This sample belongs to a different instrument. Choose a " + Kit.Names[part] + " sound instead."); return; }
@@ -161,6 +183,7 @@ namespace Pulse {
             settings.Pads = preset.Pads; settings.Inputs = preset.Inputs; settings.InstrumentNotes = preset.InstrumentNotes; settings.SampleFiles = preset.SampleFiles;
             settings.Channel = preset.Channel; settings.Volume = preset.Volume; settings.Sound = preset.Sound; settings.MidiEnabled = preset.MidiEnabled;
             settings.Transpose = preset.Transpose; settings.NoteOffMs = preset.NoteOffMs;
+            settings.CrosstalkPercent = preset.CrosstalkPercent; settings.ProtectionDefaultsApplied = true; triggerFilter.Clear(); Get<Slider>("CrosstalkSlider").Value = settings.CrosstalkPercent;
             FixSampleTypes();
             // Keep this PC's device identity, sample library root and chosen MIDI port.
             for (int i = 0; i < 8; i++) {
@@ -173,7 +196,7 @@ namespace Pulse {
             Get<ComboBox>("TransposeCombo").SelectedItem = settings.Transpose; Get<Slider>("LengthSlider").Value = settings.NoteOffMs; Get<TextBlock>("LengthValue").Text = settings.NoteOffMs.ToString();
             Get<ComboBox>("RouteCombo").SelectedIndex = settings.Sound ? settings.MidiEnabled ? 2 : 0 : 1;
             Get<CheckBox>("SoundToggle").IsChecked = settings.Sound; updating = false;
-            midi.Panic(); if (audio != null) audio.Panic(); lastMidiScan = -10000; Changed(true); SelectPad(selected);
+            midi.Panic(); lastMidiScan = -10000; Changed(true); RestartAudio(); SelectPad(selected);
         }
         void FixSampleTypes() {
             string[] defaults = SampleLibrary.Preset(library,2); bool changed = false;

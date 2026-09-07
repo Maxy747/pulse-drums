@@ -6,11 +6,18 @@ using System.Threading;
 
 namespace Pulse {
     public static class Tests {
+        static Tests() { Program.EnsureDependencies(); }
         static int passed;
         static void Check(bool ok, string message) { if (!ok) throw new Exception(message); passed++; }
-        public static int Main(string[] args) {
+        [STAThread] public static int Main(string[] args) {
             try {
                 Frame f;
+                Check(AsioOutput.Drivers() != null,"Embedded ASIO dependencies and driver discovery");
+                if (args.Contains("--asio-probe")) using (var asio = new AudioEngine()) {
+                    asio.Volume = 0; asio.Start("Focusrite USB ASIO"); Thread.Sleep(1000);
+                    Console.WriteLine("ASIO probe: " + asio.OutputStatus + " " + asio.Error);
+                    Check(asio.Error == "" && asio.Asio != null && asio.RenderedBlocks > 100,"Focusrite USB ASIO stereo output initializes and pulls audio callbacks");
+                }
                 Check(Protocol.Parse("NOTE,38,127\r\n", out f) && f.Value == 127, "Valid note");
                 Check(Protocol.Parse("RAW,7,1023", out f) && f.Index == 7, "Valid ADC peak");
                 foreach (string invalid in new[] {"", "NOTE,128,50", "NOTE,38,128", "RAW,8,10", "RAW,0,1024", "RAW,-1,3", "NOTE,38,-1", "SET,HIT,1,40", "NOTE,38", "NOTE,38,10,2", "NOTE,38,abc", new string('x', 300)}) Check(!Protocol.Parse(invalid,out f), "Reject " + invalid);
@@ -36,6 +43,23 @@ namespace Pulse {
                 var commands = Protocol.Thresholds(new Settings());
                 Check(commands.Length == 16 && commands[0] == "SET,RESET,0,40\n" && commands[15] == "SET,HIT,7,10\n", "Calibrated firmware wire commands");
                 var calibrated = new Settings(); calibrated.Normalize();
+                var protectedSettings = calibrated.Copy(); Sensitivity.Apply(protectedSettings,"Medium");
+                var filter = new TriggerFilter(); var accepted = new List<Frame>();
+                for (int i = 0; i < 20; i++) { filter.Push(new Frame("HIT",1,100) { Peak = 300 },protectedSettings,1000+i*5); filter.Flush(protectedSettings,1000+i*5,accepted.Add); }
+                filter.Flush(protectedSettings,1200,accepted.Add); Check(accepted.Count == 1,"Twenty ringing events become one hit");
+                filter.Push(new Frame("HIT",1,100) { Peak = 300 },protectedSettings,1250); filter.Flush(protectedSettings,1260,accepted.Add); Check(accepted.Count == 2,"New strike after quiet interval is accepted");
+                filter.Clear(); accepted.Clear();
+                filter.Push(new Frame("HIT",4,80) { Peak = 80 },protectedSettings,2000); filter.Push(new Frame("HIT",1,120) { Peak = 800 },protectedSettings,2003); filter.Flush(protectedSettings,2020,accepted.Add);
+                Check(accepted.Count == 1 && accepted[0].Index == 1,"Weak neighbour before hard strike is rejected by raw peak");
+                filter.Clear(); accepted.Clear(); filter.Push(new Frame("HIT",4,100) { Peak = 600 },protectedSettings,3000); filter.Push(new Frame("HIT",1,120) { Peak = 800 },protectedSettings,3002); filter.Flush(protectedSettings,3020,accepted.Add);
+                Check(accepted.Count == 2,"Two strong simultaneous hits survive crosstalk filtering");
+                filter.Clear(); accepted.Clear(); protectedSettings.CrosstalkPercent = 0;
+                filter.Push(new Frame("HIT",4,80) { Peak = 80 },protectedSettings,4000); filter.Flush(protectedSettings,4000,accepted.Add);
+                Check(accepted.Count == 1,"Crosstalk off has no comparison delay");
+                Sensitivity.Apply(protectedSettings,"High"); int highThreshold = protectedSettings.Pads[0].Hit;
+                Sensitivity.Apply(protectedSettings,"Low"); Check(protectedSettings.Pads[0].Hit > highThreshold && protectedSettings.Pads[0].RetriggerMs == 110,"Low sensitivity rejects more than High");
+                Sensitivity.Apply(protectedSettings,"Medium");
+                Check(protectedSettings.Inputs.SequenceEqual(calibrated.Inputs) && protectedSettings.Pads.All(p => p.RetriggerMs == 70),"Sensitivity keeps mapping and adds ringing guard");
                 Check(calibrated.NoteOffMs == 10 && calibrated.Transpose == 0 && calibrated.Pads.All(p => p.VelocityCeiling == 127),"Screenshot MIDI timing, transpose and ceiling defaults");
                 Check(calibrated.Pads.Select(p => p.Hit).SequenceEqual(new[]{140,20,20,20,10,60,10,10}) && calibrated.Pads.All(p => p.VelocityFloor == 50 && p.Curve == .6) && calibrated.Channel == 1,"Screenshot factory defaults");
                 var swapped = Kit.Assign(calibrated.Inputs,0,0);
@@ -62,7 +86,8 @@ namespace Pulse {
                 string folder = Path.Combine(Path.GetTempPath(), "pulse-tests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(folder);
                 try {
                     string path = Path.Combine(folder,"settings.xml"), warning;
-                    s.ThemeName = "Blue"; s.Pads[4].VelocityFloor = 50; SettingsStore.Save(s,path); var loaded = SettingsStore.Load(path,out warning);
+                    s.ThemeName = "Blue"; s.AsioDriver = "Focusrite USB ASIO"; s.CrosstalkPercent = 45; s.Pads[4].VelocityFloor = 50; SettingsStore.Save(s,path); var loaded = SettingsStore.Load(path,out warning);
+                    Check(loaded.AsioDriver == s.AsioDriver && loaded.CrosstalkPercent == 45,"ASIO selection and crosstalk persist");
                     Check(loaded.ThemeName == "Blue", "Theme survives restart");
                     Check(loaded.Pads[4].VelocityFloor == 50 && warning == "", "Settings persistence");
                     s.Pads[4].Note = 80; SettingsStore.Save(s,path); loaded = SettingsStore.Load(path,out warning);
@@ -89,6 +114,17 @@ namespace Pulse {
                     mixer.MixBlock(output); Check(output.All(v => v > 0 && v <= 32112),"Overlapping loud hits cannot overflow or wrap PCM");
                 }
                 if (!args.Contains("--no-audio")) using (var audio = new AudioEngine()) { audio.Start(); Thread.Sleep(250); Check(audio.Error == "", "Native waveOut initialization: " + audio.Error); }
+                if (args.Contains("--audio-stress")) using (var audio = new AudioEngine()) {
+                    audio.Volume = .05f; audio.Start();
+                    var watch = System.Diagnostics.Stopwatch.StartNew();
+                    while (watch.ElapsedMilliseconds < 8000) {
+                        for (int part = 0; part < 8; part++) audio.Hit(part,100);
+                        var garbage = new byte[1000000]; garbage[0] = 1;
+                        Thread.Sleep(30);
+                    }
+                    Console.WriteLine("Audio stress: blocks=" + audio.RenderedBlocks + ", empty queues=" + audio.Underruns + ", max service gap=" + audio.MaxServiceGapMs + " ms, MMCSS=" + audio.PriorityScheduled);
+                    Check(audio.Error == "" && audio.RenderedBlocks > 1000 && audio.Underruns == 0,"Eight-second polyphony / allocation stress without empty queues");
+                }
                 using (var midi = new Midi()) { Check(midi.Ensure("") == "MIDI off", "Optional MIDI without a loopback driver"); midi.Panic(); }
                 var library = SampleLibrary.Scan(Path.Combine(SettingsStore.Folder,"Samples","GSCW"));
                 Check(SampleLibrary.Classify("6-Splash-V01-SABIAN-HH-6.wav") == -1,"Splash is not a crash");

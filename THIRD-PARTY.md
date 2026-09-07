@@ -1,5 +1,9 @@
 # References and sample content
 
+## Audio libraries
+
+NAudio.Core and NAudio.Asio **2.2.1** are from the official [NAudio repository](https://github.com/naudio/NAudio/tree/v2.2.1) / NuGet packages, under MIT (Mark Heath and contributors). Microsoft.Win32.Registry **4.7.0**, .NET Framework 4.6 compatibility assembly, is from Microsoft's NuGet package under MIT (.NET Foundation and contributors). Binaries are vendored in `vendor/NAudio` and embedded in Pulse.exe. License texts are present there and embedded as resources. `SHA256.json` records the shipped binary hashes.
+
 The app's vector kit drawing uses the user's supplied numbered photograph and top-down dark/green artwork as visual references. The provided images are not redistributed in this repository or embedded into the executable.
 
 ## GSCW sample library

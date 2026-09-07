@@ -20,6 +20,16 @@ using Forms = System.Windows.Forms;
 
 namespace Pulse {
     public static class Program {
+        static Program() {
+            AppDomain.CurrentDomain.AssemblyResolve += (s,e) => {
+                string name = new AssemblyName(e.Name).Name;
+                using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Pulse.Dependencies." + name + ".dll")) {
+                    if (stream == null) return null;
+                    using (var memory = new MemoryStream()) { stream.CopyTo(memory); return Assembly.Load(memory.ToArray()); }
+                }
+            };
+        }
+        public static void EnsureDependencies() { }
         [STAThread] public static int Main(string[] args) {
             if (args.Contains("--exit")) { try { using (var quit = EventWaitHandle.OpenExisting("Local\\PulseDrumsExit")) quit.Set(); return 0; } catch (WaitHandleCannotBeOpenedException) { return 0; } }
             bool smoke = args.Contains("--smoke");
@@ -42,6 +52,7 @@ namespace Pulse {
         readonly bool smoke, background;
         bool updating, exiting, dirty;
         int selected, hits;
+        int reportedAudioUnderruns;
         readonly Stopwatch clock = Stopwatch.StartNew();
         long saveAt, lastMidiScan;
         readonly long[] lastHits = Enumerable.Repeat(-1000L, 8).ToArray();
@@ -56,7 +67,8 @@ namespace Pulse {
         volatile string identified;
         string portsSignature = "", midiSignature = "", midiState = "MIDI off";
         readonly Midi midi = new Midi();
-        AudioEngine audio;
+        volatile AudioEngine audio;
+        readonly TriggerFilter triggerFilter = new TriggerFilter();
         DrumConnection connection;
         Forms.NotifyIcon tray;
         EventWaitHandle wake, quit;
@@ -67,6 +79,10 @@ namespace Pulse {
         public Controller(bool isSmoke, bool startHidden) {
             smoke = isSmoke; background = startHidden;
             string warning = ""; settings = smoke ? new Settings() : SettingsStore.Load(SettingsStore.PathName, out warning); settings.Normalize(); live = settings.Copy(); savePath = SettingsStore.PathName;
+            if (!smoke && !settings.ProtectionDefaultsApplied) {
+                foreach (var pad in settings.Pads) pad.RetriggerMs = Math.Max(70,pad.RetriggerMs);
+                settings.CrosstalkPercent = 45; settings.ProtectionDefaultsApplied = true; live = settings.Copy();
+            }
             using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Pulse.Main.xaml")) using (var reader = new StreamReader(stream)) Window = Theme.Load(reader.ReadToEnd(), settings.ThemeName);
             Window.Height = Math.Min(Window.Height,SystemParameters.WorkArea.Height - 24);
             Window.SourceInitialized += delegate { int dark = 1; try { DwmSetWindowAttribute(new WindowInteropHelper(Window).Handle, 20, ref dark, 4); } catch { } };
@@ -77,7 +93,8 @@ namespace Pulse {
                     var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
                     t.Tick += delegate { t.Stop(); Smoke(); }; t.Start(); return;
                 }
-                audio = new AudioEngine(); audio.Volume = (float)settings.Volume; audio.Start();
+                audio = new AudioEngine(); audio.Volume = (float)settings.Volume; if (settings.Sound) audio.Start(settings.AsioDriver); else audio.OutputStatus = "Audio released · MIDI only";
+                Get<Button>("AsioPanelButton").IsEnabled = audio.Asio != null;
                 StartSampleLibrary();
                 connection = new DrumConnection(settings);
                 connection.Status += (message, verified) => { connectionText = message; ready = verified; };
@@ -86,7 +103,7 @@ namespace Pulse {
                 connection.Log += message => logs.Enqueue(message);
                 connection.Received += ReceiveInput;
                 connection.Start();
-                midiTimer = new System.Threading.Timer(_ => midi.Tick(clock.ElapsedMilliseconds), null, 0, 5);
+                midiTimer = new System.Threading.Timer(_ => { if (!learning) triggerFilter.Flush(live,clock.ElapsedMilliseconds,AcceptTrigger); midi.Tick(clock.ElapsedMilliseconds); }, null, 0, 2);
                 MakeTray();
                 wake = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\PulseDrumsShow");
                 wakeRegistration = ThreadPool.RegisterWaitForSingleObject(wake, (_, timedOut) => Window.Dispatcher.BeginInvoke(new Action(Show)), null, Timeout.Infinite, false);
@@ -205,12 +222,10 @@ namespace Pulse {
         void Enqueue(Frame f) { if (frames.Count > 512) { Frame discard; frames.TryDequeue(out discard); } frames.Enqueue(f); }
         void Hit(int index, int velocity, bool preview) {
             var cfg = live; var p = cfg.Pads[cfg.Inputs[index]]; long now = clock.ElapsedMilliseconds;
-            if (!preview && now - lastHits[index] < p.RetriggerMs) return;
-            if (!preview) lastHits[index] = now;
             int output = Protocol.Velocity(velocity,p);
             Enqueue(new Frame(preview ? "PREVIEW" : "HIT",index,output));
             if (p.Muted || smoke) return;
-            if (cfg.Sound && audio != null) audio.Hit(index,output);
+            var activeAudio = audio; if (cfg.Sound && activeAudio != null) activeAudio.Hit(index,output);
             if (cfg.MidiEnabled) midi.Hit(Math.Max(0,Math.Min(127,cfg.InstrumentNotes[index] + cfg.Transpose)),output,cfg.Channel,now,cfg.NoteOffMs);
         }
         void Tick() {
@@ -256,7 +271,15 @@ namespace Pulse {
                 var box = Get<TextBox>("LogText"); box.AppendText(entry); if (box.Text.Length > 14000) box.Text = box.Text.Substring(box.Text.Length - 10000); box.ScrollToEnd();
                 if (!smoke) try { Directory.CreateDirectory(SettingsStore.Folder); string logPath = System.IO.Path.Combine(SettingsStore.Folder,"device.log"); if (File.Exists(logPath) && new FileInfo(logPath).Length > 512000) File.WriteAllText(logPath,""); File.AppendAllText(logPath,entry); } catch { }
             }
-            if (audio != null && audio.Error != "") Get<TextBlock>("AudioStatus").Text = audio.Error;
+            if (audio != null) {
+                Get<TextBlock>("AudioStatus").Text = audio.Error != "" ? audio.Error : audio.OutputStatus + (audio.Asio == null ? " · " + audio.Underruns + " dropouts" : "");
+                if (audio.Asio != null && audio.Asio.ResetRequested) RestartAudio();
+                if (audio.Underruns != reportedAudioUnderruns) {
+                    reportedAudioUnderruns = audio.Underruns;
+                    logs.Enqueue("Audio queue ran empty: " + reportedAudioUnderruns + " times; longest service gap " + Interlocked.Read(ref audio.MaxServiceGapMs) + " ms.");
+                }
+            }
+            Get<TextBlock>("TriggerStatus").Text = settings.CrosstalkPercent + "% · " + triggerFilter.Suppressed + " filtered";
             if (dirty && clock.ElapsedMilliseconds >= saveAt) Save();
         }
         void MakeTray() {
@@ -310,11 +333,19 @@ namespace Pulse {
                 var defaults = new Settings(); defaults.Normalize(); ApplyPreset(defaults); SelectPad(0); SetView(false);
                 if (!settings.Inputs.SequenceEqual(Kit.DefaultInputs) || SelectedPad.Hit != 20) throw new Exception("Preset restore failed");
                 foreach (string theme in new[] { "Red", "Blue", "Green" }) {
-                    Get<ComboBox>("ThemeCombo").SelectedItem = theme; Window.UpdateLayout();
+                    Get<Button>(theme + "ThemeButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Window.UpdateLayout();
                     if (Theme.Name != theme || settings.ThemeName != theme) throw new Exception("Theme selection failed");
                     kitView.Update(new double[]{0,1,0,0,0,0,0,0},selected,-1);
                     Screenshot(System.IO.Path.Combine(folder,"pulse-theme-" + theme.ToLowerInvariant() + ".png"));
                 }
+                Get<Button>("MediumSensitivity").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                if (settings.Pads[0].RetriggerMs != 70 || settings.CrosstalkPercent != 45) throw new Exception("Sensitivity buttons failed");
+                Get<Button>("DefaultsButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                if (settings.Pads[0].Hit != 140 || settings.Pads[0].RetriggerMs != 0 || settings.CrosstalkPercent != 0) throw new Exception("Original defaults changed");
+                SelectPad(2); if (!Get<TextBlock>("SampleCategoryHint").Text.Contains("Kit 2 only")) throw new Exception("Tom availability explanation missing");
+                Get<ComboBox>("AudioDeviceCombo").Items.Add("Focusrite USB ASIO"); Get<ComboBox>("AudioDeviceCombo").SelectedItem = "Focusrite USB ASIO";
+                if (settings.AsioDriver != "Focusrite USB ASIO") throw new Exception("Output selection failed");
+                Screenshot(System.IO.Path.Combine(folder,"pulse-asio-controls.png"));
                 File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"PASS: green/red/blue themes, kit/classic views, isolated hit glow, sliders, audition, calibrated reset, MIDI note mapping, learn cancel, all-eight assignment, undo after completion, repeated undo, preset restore. No hardware or user settings writes.");
             } catch (Exception e) { File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"FAIL: " + e); Environment.ExitCode = 1; }
             exiting = true; Window.Close();

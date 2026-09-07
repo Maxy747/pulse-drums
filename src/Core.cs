@@ -33,6 +33,9 @@ namespace Pulse {
         public string[] SampleFiles { get; set; }
         public bool ClassicView { get; set; }
         public string ThemeName { get; set; }
+        public string AsioDriver { get; set; }
+        public int CrosstalkPercent { get; set; }
+        public bool ProtectionDefaultsApplied { get; set; }
         public string SampleFolder { get; set; }
         public bool SampleDefaultsApplied { get; set; }
         public bool MidiEnabled { get; set; }
@@ -44,6 +47,7 @@ namespace Pulse {
         }
         public Settings Copy() { var s = (Settings)MemberwiseClone(); s.Pads = Pads.Select(p => p.Copy()).ToArray(); s.Inputs = Inputs == null ? null : (int[])Inputs.Clone(); s.InstrumentNotes = InstrumentNotes == null ? null : (int[])InstrumentNotes.Clone(); s.SampleFiles = SampleFiles == null ? null : (string[])SampleFiles.Clone(); return s; }
         public void Normalize() {
+            AsioDriver = AsioDriver ?? ""; CrosstalkPercent = Math.Max(0,Math.Min(70,CrosstalkPercent));
             if (ThemeName != "Red" && ThemeName != "Blue") ThemeName = "Green";
             if (Pads == null || Pads.Length != 8) Pads = new Settings().Pads;
             for (int i = 0; i < 8; i++) {
@@ -99,8 +103,8 @@ namespace Pulse {
     }
     public struct Frame {
         public string Kind;
-        public int Index, Value;
-        public Frame(string kind, int index, int value) { Kind = kind; Index = index; Value = value; }
+        public int Index, Value, Peak;
+        public Frame(string kind, int index, int value) { Kind = kind; Index = index; Value = value; Peak = 0; }
     }
     public static class Protocol {
         public static readonly int[] Notes = {36,38,42,48,45,41,49,51};
@@ -130,7 +134,7 @@ namespace Pulse {
             if (frame.Kind != "RAW") return false;
             bool matched = pending && now >= at && now - at < 250;
             pending = false;
-            if (matched) hit = new Frame("HIT", frame.Index, note.Value);
+            if (matched) hit = new Frame("HIT", frame.Index, note.Value) { Peak = frame.Value };
             return matched;
         }
     }

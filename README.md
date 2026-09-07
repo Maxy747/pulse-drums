@@ -14,7 +14,7 @@ Requires Windows 10/11 x64, .NET Framework 4.8, a Windows audio output and your 
 
 Close Arduino Serial Monitor and the old drum bridge to free the port. Open Pulse, plug in the Nano, and hit a pad once to verify the serial protocol. Saved thresholds are sent automatically. No Connect, Apply or Save-settings button is needed.
 
-The default view follows the numbered physical kit. Pieces glow on a hit, independently and simultaneously. The **Theme** selector at the top switches between **Green**, **Red**, and **Blue**, including the kit glow and controls; the choice is remembered. Click a piece to tune it; double-click, press **1–8**, or use **Audition** to test its sound. **Classic controls** switches to the previous pad-card view. This view choice is remembered.
+The default view follows the numbered physical kit. Pieces glow on a hit, independently and simultaneously. The three colour dots at the top right switch between **Green**, **Red**, and **Blue**; the selected dot has an outline. The USB/COM indicator is centred. Theme and view choices are remembered. Click a piece to tune it; double-click, press **1–8**, or use **Audition** to test its sound. **Classic controls** switches to the previous pad-card view.
 
 | Number | Instrument | Initial input | Default MIDI note |
 | --- | --- | --- | ---: |
@@ -52,6 +52,10 @@ Output choices:
 
 For Ableton, choose your existing loopMIDI output, then enable that input in Ableton and arm the instrument track. On this PC Windows calls the port **Nano Drums**, whereas the old Python UI displayed **Nano Drums 1**. Pulse remembers the output and retries when it becomes available. It does not install a virtual MIDI driver.
 
+The audio-device selector offers **Windows default output** and installed **ASIO** drivers. For Scarlett, choose **Focusrite USB ASIO** to send stereo audio directly to outputs 1/2 through the Focusrite driver. **ASIO settings** opens its buffer/sample-rate panel; **Restart audio** retries a failed connection. Selection persists. MIDI-only mode releases the audio device for the DAW. Pulse uses 48 kHz; driver resets trigger reinitialization. A missing/busy ASIO device shows an error instead of silently routing to other speakers.
+
+The status reports the driver buffer and output latency, not end-to-end drum latency. Low buffers can cause crackles; raise the buffer in [Focusrite Device Settings](https://support.focusrite.com/hc/en-gb/articles/208814065-How-to-change-sample-rate-buffer-size-in-Windows) if needed. On the development PC, the Scarlett successfully opened at 32 samples with 3.2 ms reported output latency. Audible performance still needs listening confirmation.
+
 WAV playback supports mono/stereo PCM 8/16/24/32-bit and float32, with sample-rate conversion in memory to 48 kHz stereo. Original files are not rewritten. One-shots are limited to 60 seconds/128 MB. GSCW Kit 1 has no separate 12-inch tom, so its Low tom preset uses the matching 12-inch sample from Kit 2; Kit 2 has distinct 10/12/13-inch choices. See [sample source and license notes](THIRD-PARTY.md).
 
 ## Your defaults and saved presets
@@ -75,7 +79,21 @@ Velocity floor **50**, ceiling **127**, gain **1**, curve **0.6**, MIDI channel 
 
 **Your defaults** restores the supplied calibration and default musical MIDI values, keeping input assignments and samples. **Reset** restores only the selected input's calibration and that instrument's default MIDI note. Normal edits auto-save to `%LOCALAPPDATA%\PulseDrums\settings.xml`, with a `.bak` copy of the previous save. Existing saved settings are kept during upgrades.
 
-Trigger values are constrained to 2–1022 and re-arm values to 1–(trigger−1), avoiding invalid edge cases in the reference firmware. Response curves below 1 make softer hits louder. The retrigger guard suppresses rapid repeated hits on the PC; it does not alter firmware crosstalk behavior.
+Trigger values are constrained to 2–1022 and re-arm values to 1–(trigger−1). Response curves below 1 make softer hits louder.
+
+### Sensitivity and unwanted triggers
+
+The three sensitivity buttons change trigger/re-arm thresholds, ringing guards and crosstalk protection for all inputs while keeping mappings, sounds and MIDI notes:
+
+| Preset | Threshold multiplier over your original calibration | Quiet-time guard | Crosstalk rejection |
+| --- | ---: | ---: | ---: |
+| High | 0.75× | 35 ms | 25% |
+| Medium | 1.5× | 70 ms | 45% |
+| Low | 2.5× | 110 ms | 60% |
+
+The quiet-time guard ignores continuous sensor ringing until that input has been quiet for the selected interval. Crosstalk protection compares raw peaks over 6 ms, rejects weaker neighbouring triggers, and guards against vibration tails for 25 ms. At 45%, a neighbouring peak below 45% of a stronger hit is rejected. Only accepted hits reach session counting, samples and MIDI. Set crosstalk to zero to remove its comparison delay. High protection can suppress soft simultaneous strokes or fast rolls; use High sensitivity or lower the individual guard when needed.
+
+On the first 2.1 launch, existing thresholds and mappings are retained, guards are raised to at least 70 ms, and crosstalk starts at 45%. **Your defaults** still restores the original screenshot calibration, including zero extra guard and no crosstalk filter. These settings are editable and saved in named presets. The filters operate on the PC; firmware is unchanged.
 
 ## Background operation
 
@@ -91,7 +109,7 @@ Pulse sends `SET,RESET,pad,value` and `SET,HIT,pad,value`, paced 25 ms apart. Th
 
 Arduino/CH340/FTDI/CP210x identifiers are candidate hints, not unique drum-kit IDs. With multiple candidates, Pulse cycles every eight seconds until one is verified. A port can also be selected once and remembered.
 
-The reference sketch's blocking 10 ms peak scan remains unchanged. Four 256-frame audio buffers at 48 kHz represent about 21 ms of queued audio, plus Windows and hardware latency. End-to-end latency has not been measured. If the Windows audio device is removed or changed and playback stops, restart Pulse.
+The reference sketch's blocking 10 ms peak scan remains unchanged. Windows output queues six 256-frame buffers at 48 kHz (32 ms), uses the multimedia scheduler, and reports empty-queue events. ASIO uses the driver's callback buffer instead of that Windows queue. End-to-end latency includes firmware, serial, any crosstalk window and the output device; it has not been measured. Use Restart audio after a device change or connection failure.
 
 ## Build and test
 
@@ -100,7 +118,7 @@ The reference sketch's blocking 10 ms peak scan remains unchanged. Four 256-fram
 .\bin\Pulse.exe --smoke
 ```
 
-Uses the .NET Framework compiler shipped with Windows, without NuGet dependencies. The local test suite checks protocol parsing, mapping, learning, presets, safe calibration, WAV decoding, stereo/resampling and audio initialization. When the GSCW library is present, every downloaded sample is decoded. CI uses `-NoAudio` because hosted runners lack audio hardware.
+Uses the .NET Framework 4.8 compiler shipped with Windows. Pinned NAudio ASIO/Core libraries and a registry compatibility assembly are vendored and embedded, so the executable remains standalone with no package restore. Licenses and provenance are in `vendor/NAudio` and THIRD-PARTY.md. The local tests cover trigger bursts, crosstalk, mapping, learning, presets, WAV decoding and audio mixing. When the sample library is present, all 360 WAVs are decoded. CI uses `-NoAudio`. Optional `Pulse.Tests.exe --asio-probe --audio-stress` opens Focusrite ASIO silently and stress-tests the Windows queue at low volume.
 
 The WPF smoke test renders kit/classic/hit/setup screenshots and exercises assignment, cancel, reset, preset restore and control changes without opening a serial port or writing user settings. Actual pad identification and audible DAW reception require hands-on testing.
 

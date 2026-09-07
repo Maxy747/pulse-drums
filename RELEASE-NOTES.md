@@ -1,23 +1,13 @@
-Pulse 2.0.2 — themes, kick drum icon, setup undo and cleaner playback.
+Pulse 2.1.0 — direct ASIO output and cleaner drum triggering.
 
-- A bass drum icon replaces the old logo in the app, executable and tray.
-- Green, Red and Blue themes are available at the top; the kit, hit glows and controls update together and remember your choice.
-- Undo last part reverses the last setup assignment, including after completing setup. Repeated undo and re-recording preserve one-to-one input mappings.
-- Audio buffers now refill in playback order across ring boundaries, avoiding reordered chunks when Windows coalesces completion events.
-- Removed always-on saturation. Samples play linearly with headroom and stereo-linked overload protection.
-- Verified with 451 assertions, all 360 WAV decodes and WPF interaction/render checks. Audible improvement on the user's output still needs listening confirmation.
+- Direct stereo ASIO output, including Focusrite USB ASIO for Scarlett. Driver selection persists; ASIO settings and Restart audio are available in the output panel. MIDI-only mode releases the audio driver for Ableton.
+- Ringing protection filters repeated events before session counting, samples and MIDI. Crosstalk protection compares raw sensor peaks and rejects weaker neighbouring vibrations.
+- High, Medium and Low sensitivity buttons set threshold, quiet-time and crosstalk presets. Individual settings remain editable and preset-saveable. Your defaults still restores the original calibration.
+- Existing installations gain a 70 ms minimum ringing guard and 45% crosstalk protection once, preserving thresholds, mappings and samples.
+- Three independent colour-dot buttons on the right; COM status centred. Kick drum icon, classic view and hands-free setup with Undo are retained.
+- Tom selectors explain actual pack coverage: 12-inch Low tom is Kit 2 only; 10-inch Mid and 13-inch Floor tom have both kits. Flam samples are recorded double strikes. No artificial substitute recordings are added.
+- Windows playback uses ordered buffers, a manual event, multimedia thread scheduling and a 32 ms queue with dropout diagnostics. Always-on saturation was removed in 2.0.2.
 
-- Both GSCW kit presets now default to V05 for every piece. Individual choices and saved presets remain editable.
+Validation: 462 local assertions, 360 WAV decodes, WPF interaction/render checks, an eight-second polyphony/allocation stress run with no empty Windows audio queues, and actual Focusrite USB ASIO initialization/audio callbacks. The Scarlett reported 32 samples and 3.2 ms output latency; this is not end-to-end latency. Audible cleanliness and physical crosstalk tuning still require playing the kit.
 
-- Top-down kit in your numbered arrangement, with independent green hit glows. Classic controls remain switchable.
-- Hands-free setup for one input or all eight: strike each requested piece twice to confirm and automatically advance. No Confirm/Next clicks. Cancel preserves previous assignments.
-- The learned map drives the diagram, samples and MIDI together, while sensor thresholds stay with their inputs.
-- Native stereo WAV playback, two GSCW kit presets, instrument-only sound lists, matching custom WAV loading and a synth fallback.
-- All 360 GSCW samples downloaded and decoded locally. Samples are fetched directly from their source by the installer and stored separately from app updates.
-- Direct samples, Ableton/MIDI, or both as the output mode.
-- The supplied calibration is the factory default. Named presets save assignments, tuning, sounds and musical MIDI settings.
-- Configurable velocity ceiling, transpose and note length, with USB reconnect and tray/startup behavior retained.
-
-Extract the ZIP and run install.ps1. It keeps existing settings and downloads the sample library only if missing. Use -WithoutSamples for the synth/MIDI app alone. See THIRD-PARTY.md for sample source/license notes.
-
-Validated locally with automated checks, all 360 WAV decodes and rendered WPF interaction tests. Physical pad learning and audible DAW reception still require hands-on testing.
+Extract the ZIP and run install.ps1. Existing samples and settings are retained. Samples download directly from the upstream library only if missing. Pulse.exe remains standalone; embedded ASIO dependencies and their licenses are documented in THIRD-PARTY.md.
