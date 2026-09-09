@@ -174,6 +174,22 @@ namespace Pulse {
                 Check(SampleLibrary.Classify("HHats-Crash-V01-SABIAN-AAX.wav") == 0,"Hi-hat articulation remains on hi-hat");
                 Check(SampleLibrary.Classify("TOM13-V01-StarClassic-13x13.wav") == 6 && SampleLibrary.Classify("V01-TTom-12.wav") == 2,"Low and floor tom categories stay separate");
                 Check(!SampleLibrary.Matches(1,"Ride-V01-ROBMOR-SABIAN-22.wav",SettingsStore.Folder),"Crash rejects a ride sample");
+                Check(SampleLibrary.Matches(2,"TOM13-V05-StarClassic-13x13.wav",SettingsStore.Folder),"Low tom accepts Kit 1 tom alternatives");
+                Check(!SampleLibrary.Matches(2,"SNARE-V05-CustomWorks-6x13.wav",SettingsStore.Folder),"Tom selector still excludes snare");
+                var tomChoices = new[] {
+                    new SampleChoice { Part=6, KitNumber=1, Path="TOM13-V05-StarClassic-13x13.wav" },
+                    new SampleChoice { Part=4, KitNumber=1, Path="TOM10-V05-StarClassic-10x10.wav" },
+                    new SampleChoice { Part=2, KitNumber=2, Path="V08-TFlam-12.wav" },
+                    new SampleChoice { Part=2, KitNumber=2, Path="V05-TTom-12.wav" },
+                    new SampleChoice { Part=3, KitNumber=1, Path="SNARE-V05-CustomWorks-6x13.wav" }
+                };
+                foreach (int part in new[] {2,4,6}) {
+                    var options = SampleLibrary.ForPart(tomChoices,part);
+                    Check(options.Length == 4 && options.Select(c => c.KitNumber).Distinct().Count() == 2,"Both kits available on tom " + part);
+                    Check(options.Where(c => c.KitNumber == 2).First().Path == "V05-TTom-12.wav","Single V05 precedes flam on tom " + part);
+                }
+                Check(SampleLibrary.Description("V08-TFlam-12.wav") == "12-inch · V08 · Flam (double hit)","Recorded flam clearly labeled");
+                Check(SampleLibrary.Description("TOM13-V05-StarClassic-13x13.wav") == "13-inch · V05 · Single hit","Kit 1 real tom size labeled");
                 if (library.Length > 0) {
                     for (int kit = 1; kit <= 2; kit++) { var presetFiles = SampleLibrary.Preset(library,kit); Check(presetFiles.All(File.Exists),"Eight working defaults for GSCW kit " + kit); Check(presetFiles.All(p => Path.GetFileName(p).ToUpperInvariant().Contains("V05")),"All eight preset defaults use V05 in kit " + kit); for (int part = 0; part < 8; part++) Check(SampleLibrary.Classify(Path.GetFileName(presetFiles[part])) == part,"Preset sample matches instrument " + part); }
                     foreach (var sample in library) { var data = WaveFile.Load(sample.Path); Check(data.Length % 2 == 0 && data.Any(v => Math.Abs(v) > .001),"Decode " + sample.Label); }

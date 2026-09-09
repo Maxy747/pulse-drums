@@ -15,8 +15,23 @@ namespace Pulse {
             if (!Directory.Exists(folder)) return new SampleChoice[0];
             return Directory.GetFiles(folder,"*.wav",SearchOption.AllDirectories).OrderBy(p => p).Select(p => new SampleChoice {
                 Path = p, Part = Classify(System.IO.Path.GetFileName(p)), KitNumber = p.IndexOf("Kit 2",StringComparison.OrdinalIgnoreCase) >= 0 ? 2 : 1,
-                Label = (p.IndexOf("Kit 2",StringComparison.OrdinalIgnoreCase) >= 0 ? "Kit 2 · " : "Kit 1 · ") + System.IO.Path.GetFileNameWithoutExtension(p)
+                Label = (p.IndexOf("Kit 2",StringComparison.OrdinalIgnoreCase) >= 0 ? "Kit 2 · " : "Kit 1 · ") + Description(p)
             }).ToArray();
+        }
+        public static bool IsTom(int part) { return part == 2 || part == 4 || part == 6; }
+        public static bool CanChoose(int part, int category) { return part == category || (IsTom(part) && IsTom(category)); }
+        public static string Description(string path) {
+            string name = System.IO.Path.GetFileNameWithoutExtension(path);
+            int part = Classify(name);
+            if (!IsTom(part)) return name;
+            string velocity = System.Text.RegularExpressions.Regex.Match(name,"[vV][0-9]+",System.Text.RegularExpressions.RegexOptions.CultureInvariant).Value.ToUpperInvariant();
+            return (part == 2 ? "12-inch" : part == 4 ? "10-inch" : "13-inch") + " · " + velocity +
+                (name.IndexOf("flam",StringComparison.OrdinalIgnoreCase) >= 0 ? " · Flam (double hit)" : " · Single hit");
+        }
+        public static SampleChoice[] ForPart(SampleChoice[] choices, int part) {
+            return choices.Where(c => CanChoose(part,c.Part)).OrderBy(c => c.KitNumber)
+                .ThenBy(c => c.Part == part ? 0 : 1).ThenBy(c => c.Part)
+                .ThenByDescending(c => Preferred(c.Path,c.Part)).ThenBy(c => c.Path).ToArray();
         }
         public static int Classify(string file) {
             string n = file.ToLowerInvariant();
@@ -48,7 +63,7 @@ namespace Pulse {
         public static bool Matches(int part, string path, string libraryRoot) {
             if (String.IsNullOrEmpty(path)) return true;
             int classified = Classify(System.IO.Path.GetFileName(path));
-            if (classified >= 0) return classified == part;
+            if (classified >= 0) return CanChoose(part,classified);
             // Unknown custom WAV names are chosen explicitly by the user. Unknown
             // library categories (such as splash) must not appear on unrelated pieces.
             string root = System.IO.Path.GetFullPath(libraryRoot).TrimEnd(System.IO.Path.DirectorySeparatorChar) + System.IO.Path.DirectorySeparatorChar;

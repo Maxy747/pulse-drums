@@ -72,6 +72,11 @@ namespace Pulse {
             route.SelectionChanged += delegate { if (updating) return; settings.Sound = route.SelectedIndex != 1; settings.MidiEnabled = route.SelectedIndex != 0; Get<CheckBox>("SoundToggle").IsChecked = settings.Sound; midi.Panic(); lastMidiScan = -10000; Changed(false); RestartAudio(); };
             Get<ComboBox>("KitPresetCombo").ItemsSource = new[] {"GSCW Kit 1", "GSCW Kit 2", "Pulse synth"}; Get<ComboBox>("KitPresetCombo").SelectedIndex = 1;
             Get<Button>("ApplyKitButton").Click += delegate { ApplySoundKit(Get<ComboBox>("KitPresetCombo").SelectedIndex); };
+            Get<Button>("ResetTomsButton").Click += delegate {
+                var defaults = SampleLibrary.Preset(library,2);
+                if (new[] { 2,4,6 }.Any(i => String.IsNullOrEmpty(defaults[i]))) { Report("Tom samples missing","Choose the downloaded GSCW sample folder first."); return; }
+                foreach (int i in new[] { 2,4,6 }) LoadSample(i,defaults[i],true);
+            };
             Get<ComboBox>("SampleCombo").SelectionChanged += delegate { if (sampleUpdating) return; var choice = Get<ComboBox>("SampleCombo").SelectedItem as SampleChoice; if (choice != null) LoadSample(selected,choice.Path,true); };
             Get<Button>("BrowseSampleButton").Click += delegate { var dialog = new OpenFileDialog { Title = "Choose a sound for " + Kit.Names[selected], Filter = "WAV samples|*.wav" }; if (dialog.ShowDialog(Window) == true) LoadSample(selected,dialog.FileName,true); };
             Get<Button>("LibraryFolderButton").Click += delegate {
@@ -162,13 +167,14 @@ namespace Pulse {
         void RefreshSampleChoices() {
             var cb = Get<ComboBox>("SampleCombo"); if (cb == null) return;
             sampleUpdating = true; cb.Items.Clear(); cb.Items.Add(new SampleChoice {Path = "",Label = "Pulse synth"});
-            foreach (var c in library.Where(c => c.Part == selected)) cb.Items.Add(c);
+            foreach (var c in SampleLibrary.ForPart(library,selected)) cb.Items.Add(c);
             string path = settings.SampleFiles[selected];
             var match = cb.Items.Cast<SampleChoice>().FirstOrDefault(c => c.Path == path);
             if (match == null) { match = new SampleChoice { Path = path, Label = Path.GetFileNameWithoutExtension(path) }; cb.Items.Add(match); }
             cb.SelectedItem = match; cb.ToolTip = path == "" ? "Built-in synthesized percussion" : path;
             Get<TextBlock>("SampleStatus").Text = sampleStates[selected]; sampleUpdating = false;
-            Get<TextBlock>("SampleCategoryHint").Text = selected == 2 ? "12-inch low tom · Kit 2 only; Kit 1 has no 12-inch recording." : selected == 4 ? "10-inch mid tom · both kits. Flam = recorded double strike." : selected == 6 ? "13-inch floor tom · both kits. Flam = recorded double strike." : "Matching sounds only";
+            Get<TextBlock>("SampleCategoryHint").Text = SampleLibrary.IsTom(selected) ? "Both kits · all recorded tom sizes. Recommended: " + (selected == 2 ? "12-inch" : selected == 4 ? "10-inch" : "13-inch") + " single hit. Kit 1 has 10/13-inch; Kit 2 has 10/12/13-inch." : "Matching sounds only";
+            Get<Button>("ResetTomsButton").Visibility = SampleLibrary.IsTom(selected) ? Visibility.Visible : Visibility.Collapsed;
         }
         void LoadSample(int part, string path, bool saveSelection) {
             if (!SampleLibrary.Matches(part,path,settings.SampleFolder)) { Report("Choose a matching sound", "This sample belongs to a different instrument. Choose a " + Kit.Names[part] + " sound instead."); return; }

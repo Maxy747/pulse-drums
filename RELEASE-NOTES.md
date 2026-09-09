@@ -1,4 +1,11 @@
-Pulse 2.2.1 — launch on Arduino connection.
+Pulse 2.2.2 — tom sound selection.
+
+- Low, Mid and Floor tom selectors now offer both kits' tom recordings, labeled with actual size, velocity layer and single-hit versus flam articulation.
+- V05 single hits sort before flams. Kit 1's real 10/13-inch recordings are available as alternatives; no missing 12-inch recording is invented.
+- Restore V05 tom set loads distinct Kit 2 single hits: Low 12-inch, Mid 10-inch and Floor 13-inch. Other sounds and learned input assignments are preserved.
+- Validated 497 assertions including all 360 downloaded WAVs, both-kit tom selection, instrument filtering and WPF tom-restore behavior.
+
+Retained from 2.2.1 — launch on Arduino connection:
 
 - Launch when drums connect toggle starts a background USB watcher at sign-in, independent of the full app's Windows-startup preference.
 - The watcher uses Windows device notifications with short enumeration retries and a 30-second fallback scan; it does not open the audio engine or COM port.

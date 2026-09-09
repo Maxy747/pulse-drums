@@ -347,7 +347,18 @@ namespace Pulse {
                 if (settings.Pads[0].RetriggerMs != 70 || settings.CrosstalkPercent != 45) throw new Exception("Sensitivity buttons failed");
                 Get<Button>("DefaultsButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 if (settings.Pads[0].Hit != 140 || settings.Pads[0].RetriggerMs != 0 || settings.CrosstalkPercent != 0) throw new Exception("Original defaults changed");
-                SelectPad(2); if (!Get<TextBlock>("SampleCategoryHint").Text.Contains("Kit 2 only")) throw new Exception("Tom availability explanation missing");
+                library = new[] {
+                    new SampleChoice { Part=6,KitNumber=1,Path="TOM13-V05-StarClassic-13x13.wav",Label="Kit 1 · 13-inch · Single hit · V05" },
+                    new SampleChoice { Part=2,KitNumber=2,Path="V05-TTom-12.wav",Label="Kit 2 · 12-inch · Single hit · V05" },
+                    new SampleChoice { Part=4,KitNumber=2,Path="V05-TTom-10.wav",Label="Kit 2 · 10-inch · Single hit · V05" },
+                    new SampleChoice { Part=6,KitNumber=2,Path="V05-FTom-13.wav",Label="Kit 2 · 13-inch · Single hit · V05" }
+                };
+                SelectPad(2); if (!Get<TextBlock>("SampleCategoryHint").Text.Contains("Both kits")) throw new Exception("Tom availability explanation missing");
+                if (Get<ComboBox>("SampleCombo").Items.Cast<SampleChoice>().Count(c => c.KitNumber == 1) != 1) throw new Exception("Kit 1 missing from Low tom");
+                string savedKick = settings.SampleFiles[5]; int[] savedInputs = (int[])settings.Inputs.Clone();
+                Get<Button>("ResetTomsButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                if (settings.SampleFiles[2] != "V05-TTom-12.wav" || settings.SampleFiles[4] != "V05-TTom-10.wav" || settings.SampleFiles[6] != "V05-FTom-13.wav" || settings.SampleFiles[5] != savedKick || !settings.Inputs.SequenceEqual(savedInputs)) throw new Exception("Tom restore failed or changed unrelated settings");
+                RefreshSampleChoices(); Window.UpdateLayout(); Screenshot(System.IO.Path.Combine(folder,"pulse-tom-controls.png"));
                 Get<ComboBox>("AudioDeviceCombo").Items.Add("Focusrite USB ASIO"); Get<ComboBox>("AudioDeviceCombo").SelectedItem = "Focusrite USB ASIO";
                 if (settings.AsioDriver != "Focusrite USB ASIO") throw new Exception("Output selection failed");
                 Screenshot(System.IO.Path.Combine(folder,"pulse-asio-controls.png"));
