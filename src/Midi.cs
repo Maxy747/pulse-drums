@@ -44,6 +44,8 @@ namespace Pulse {
                 foreach (int n in expired) noteOffs.Remove(n);
             }
         }
+        public void StopNote(int note, int channel) { lock (gate) { if (handle != IntPtr.Zero) midiOutShortMsg(handle,(uint)(0x80 | (channel-1) | (note << 8))); noteOffs.Remove(((channel-1)<<8)|note); } }
+        public void Control(int controller, int value, int channel) { lock (gate) { if (handle != IntPtr.Zero) midiOutShortMsg(handle,(uint)(0xB0 | (channel-1) | (controller << 8) | (value << 16))); } }
         public void Panic() { lock (gate) { if (handle != IntPtr.Zero) midiOutReset(handle); noteOffs.Clear(); } }
         void Close() { if (handle != IntPtr.Zero) { midiOutReset(handle); midiOutClose(handle); handle = IntPtr.Zero; } noteOffs.Clear(); selected = ""; }
         public void Dispose() { lock (gate) Close(); }

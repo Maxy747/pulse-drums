@@ -88,7 +88,7 @@ namespace Pulse {
             using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Pulse.Main.xaml")) using (var reader = new StreamReader(stream)) Window = Theme.Load(reader.ReadToEnd(), settings.ThemeName);
             Window.Height = Math.Min(Window.Height,SystemParameters.WorkArea.Height - 24);
             Window.SourceInitialized += delegate { int dark = 1; try { DwmSetWindowAttribute(new WindowInteropHelper(Window).Handle, 20, ref dark, 4); } catch { } };
-            MakePads(); BindControls(); BuildKitControls(); SelectPad(0);
+            MakePads(); BindControls(); BuildKitControls(); BuildPedalControls(); SelectPad(0);
             if (warning != "") logs.Enqueue(warning);
             Window.Loaded += delegate {
                 if (smoke) {
@@ -99,8 +99,9 @@ namespace Pulse {
                 Get<Button>("AsioPanelButton").IsEnabled = audio.Asio != null;
                 StartSampleLibrary();
                 connection = new DrumConnection(settings);
+                StartPedals();
                 connection.Status += (message, verified) => { connectionText = message; ready = verified; };
-                connection.PortsChanged += p => discovered = p;
+                connection.PortsChanged += p => { discovered = p; if (pedals != null) pedals.SetPorts(p); };
                 connection.Identified += id => identified = id;
                 connection.Log += message => logs.Enqueue(message);
                 connection.Received += ReceiveInput;
@@ -217,6 +218,7 @@ namespace Pulse {
             if (audio != null) { audio.Volume = (float)settings.Volume; audio.OutputGain = (float)Math.Pow(10,settings.OutputGainDb/20); audio.ReverbEnabled = settings.ReverbEnabled; audio.ReverbAmount = (float)settings.ReverbAmount; }
             if (audio != null) audio.ConfigureStereo(settings.PlayerStereoEnabled,settings.PlayerStereoWidth);
             if (connection != null) connection.Configure(settings, thresholds);
+            if (pedals != null) pedals.Configure(settings);
             Get<TextBlock>("SaveStatus").Text = "Saving settings…";
         }
         void Save() {
@@ -225,15 +227,17 @@ namespace Pulse {
             catch (Exception e) { dirty = false; Get<TextBlock>("SaveStatus").Text = "Could not save settings · see diagnostics"; logs.Enqueue(e.Message); }
         }
         void Enqueue(Frame f) { if (frames.Count > 512) { Frame discard; frames.TryDequeue(out discard); } frames.Enqueue(f); }
-        void Hit(int index, int velocity, bool preview) {
+        void Hit(int index, int velocity, bool preview, bool pedalClose = false) {
             var cfg = live; var p = cfg.Pads[cfg.Inputs[index]]; long now = clock.ElapsedMilliseconds;
             int output = Protocol.Velocity(velocity,p);
             Enqueue(new Frame(preview ? "PREVIEW" : "HIT",index,output));
             if (p.Muted || smoke) return;
-            var activeAudio = audio; if (cfg.Sound && activeAudio != null) activeAudio.Hit(index,output);
-            if (cfg.MidiEnabled) midi.Hit(Math.Max(0,Math.Min(127,cfg.InstrumentNotes[index] + cfg.Transpose)),output,cfg.Channel,now,cfg.NoteOffMs);
+            int hatMode = index == 0 && (pedalClose || (cfg.PedalsEnabled && pedalReady)) ? (pedalClose || hatClosed ? 1 : 2) : 0;
+            var activeAudio = audio; if (cfg.Sound && activeAudio != null) activeAudio.Hit(index,output,hatMode);
+            if (cfg.MidiEnabled) midi.Hit(Math.Max(0,Math.Min(127,(hatMode == 0 ? cfg.InstrumentNotes[index] : hatMode == 1 ? 42 : 46) + cfg.Transpose)),output,cfg.Channel,now,cfg.NoteOffMs);
         }
         void Tick() {
+            TickPedals();
             if (timer != null) timer.Interval = TimeSpan.FromMilliseconds(Window.IsVisible ? 25 : 250);
             Get<TextBlock>("StatusText").Text = connectionText;
             Get<System.Windows.Shapes.Ellipse>("StatusDot").Fill = Brush(ready ? "#C5F36B" : "#B7A26B");
@@ -297,6 +301,7 @@ namespace Pulse {
             exiting = true;
             if (timer != null) timer.Stop(); if (dirty) Save();
             if (connection != null) connection.Dispose();
+            if (pedals != null) pedals.Dispose();
             if (midiTimer != null) { using (var done = new ManualResetEvent(false)) { if (midiTimer.Dispose(done)) done.WaitOne(); } }
             if (audio != null) audio.Dispose(); midi.Dispose();
             if (tray != null) { tray.Visible = false; tray.Dispose(); }
@@ -376,7 +381,21 @@ namespace Pulse {
                 Screenshot(System.IO.Path.Combine(folder,"pulse-player-stereo.png"));
                 Get<CheckBox>("ReverbToggle").IsChecked = false;
                 if (settings.ReverbEnabled || Get<Slider>("ReverbSlider").IsEnabled) throw new Exception("Reverb off failed");
-                File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"PASS: green/red/blue themes, kit/classic views, isolated hit glow, sliders, audition, calibrated reset, MIDI note mapping, learn cancel, all-eight assignment, undo after completion, repeated undo, preset restore. No hardware or user settings writes.");
+                Get<CheckBox>("PedalsToggle").IsChecked=true; Get<CheckBox>("PedalKickOnlyToggle").IsChecked=true; Get<CheckBox>("PedalCloseToggle").IsChecked=true;
+                Get<Slider>("PedalCloseSlider").Value=60;
+                if (!live.PedalsEnabled || !live.PedalOnlyKick || !live.PedalCloseHit || live.PedalCloseVelocity != 60) throw new Exception("Pedal controls not connected to settings");
+                int beforePedals=hits; ReceiveInput(new Frame("HIT",settings.Inputs[5],120)); Tick();
+                if (hits != beforePedals) throw new Exception("Main kick was counted in pedal-only mode");
+                pedalReady=true; pedalStatus="COM4 · pedals ready";
+                ReceivePedals(new PedalFrame {Time=0,Kick=0,Hat=0}); ReceivePedals(new PedalFrame {Time=10,Kick=900,Hat=900}); Tick();
+                if (hits != beforePedals+2 || !hatClosed) throw new Exception("Kick and close pedal hits failed");
+                Get<CheckBox>("PedalCloseToggle").IsChecked=false;
+                ReceivePedals(new PedalFrame {Time=20,Kick=900,Hat=0}); ReceivePedals(new PedalFrame {Time=30,Kick=900,Hat=900}); Tick();
+                if (hits != beforePedals+2 || !hatClosed) throw new Exception("Disabled pedal-close toggle played a sound");
+                Get<Button>("KickDownButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                if (settings.KickDown != 900) throw new Exception("Pedal calibration button failed");
+                Get<TextBlock>("PedalCalibrationHint").BringIntoView(); Window.UpdateLayout(); Screenshot(System.IO.Path.Combine(folder,"pulse-pedals.png"));
+                File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"PASS: kit and classic views, themes, audio controls, learn/undo, preset restore, pedal toggles, kick-only routing, optional close hits, calibration and UI rendering. No hardware or user settings writes.");
             } catch (Exception e) { File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"FAIL: " + e); Environment.ExitCode = 1; }
             exiting = true; Window.Close();
         }

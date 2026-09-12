@@ -12,6 +12,44 @@ namespace Pulse {
         [STAThread] public static int Main(string[] args) {
             try {
                 Frame f;
+                PedalFrame pf;
+                Check(PedalDecoder.Parse("PEDALS,4294967295,0,1023",out pf) && pf.Time == UInt32.MaxValue && pf.Hat == 1023,"Pedal full ADC and clock range");
+                foreach (string bad in new[] { "PEDALS,1,-1,4","PEDALS,1,4,1024","PEDALS,-1,4,5","PEDALS,1,4","RAW,0,12","PEDALS,1,NaN,4" }) Check(!PedalDecoder.Parse(bad,out pf),"Reject invalid pedal frame");
+                var pedalFrames=new List<PedalFrame>(); int identities=0; var pedalDecoder=new PedalDecoder();
+                pedalDecoder.Feed("PULSE_PE",() => identities++,pedalFrames.Add);
+                pedalDecoder.Feed("DALS,1\r\nPEDALS,5,10,20\n"+new string('x',90)+"\nPEDALS,10,11,21\n",() => identities++,pedalFrames.Add);
+                Check(identities == 1 && pedalFrames.Count == 2,"Pedal fragmented handshake and oversized-line recovery");
+                Check(Protocol.Parse("PULSE_PEDALS,1",out f) && f.Kind == "PEDALDEVICE","Main Nano recognizes and yields pedal port");
+                Check(SerialClaims.Take("COM_TEST") && !SerialClaims.Take("com_test"),"Serial roles cannot claim same port"); SerialClaims.Release("COM_TEST"); Check(SerialClaims.Take("com_test"),"Serial port released for other role"); SerialClaims.Release("com_test");
+                var pedalSettings=new Settings(); pedalSettings.Normalize(); pedalSettings.PedalsEnabled=true; pedalSettings.DeviceId="MAIN";
+                Check(!PedalConnection.Candidate(new PortInfo {Name="COM5",Id="MAIN",Candidate=true},pedalSettings),"Pedal scan excludes saved main Nano");
+                Check(PedalConnection.Candidate(new PortInfo {Name="COM4",Id="PEDAL",Candidate=true},pedalSettings),"Pedal scan accepts separate Nano");
+                pedalSettings.PedalDeviceId="PEDAL"; Check(UsbLaunch.Matches(new PortInfo {Name="COM9",Id="PEDAL"},pedalSettings),"USB launch follows pedal identity after COM change");
+                var motion=new PedalMotion();
+                var pr=motion.Accept(new PedalFrame {Time=0,Kick=1023,Hat=1023},pedalSettings);
+                Check(pr.Closed && !pr.JustClosed && pr.KickVelocity == 0,"Connected while pressed does not generate phantom hit");
+                motion.Accept(new PedalFrame {Time=5,Kick=0,Hat=0},pedalSettings);
+                pr=motion.Accept(new PedalFrame {Time=15,Kick=900,Hat=900},pedalSettings);
+                Check(pr.KickVelocity == 127 && pr.JustClosed && pr.CloseVelocity == 127,"Independent fast kick and hat close detected together");
+                for (uint t=20;t<200;t+=5) { pr=motion.Accept(new PedalFrame {Time=t,Kick=850,Hat=740},pedalSettings); Check(pr.KickVelocity == 0 && !pr.JustClosed && pr.Closed,"Holding and threshold jitter cannot repeat hits"); }
+                motion.Accept(new PedalFrame {Time=200,Kick=0,Hat=0},pedalSettings);
+                pr=motion.Accept(new PedalFrame {Time=205,Kick=900,Hat=900},pedalSettings); Check(pr.KickVelocity > 0 && pr.JustClosed,"Release rearms both pedals");
+                pr=motion.Accept(new PedalFrame {Time=1000,Kick=900,Hat=900},pedalSettings); Check(pr.KickVelocity == 0 && !pr.JustClosed,"Stale serial gap resets safely");
+                motion.Reset(); motion.Accept(new PedalFrame {Time=0,Kick=0,Hat=0},pedalSettings);
+                int slowVelocity=0; for (uint t=5;t<=1000;t+=5) { pr=motion.Accept(new PedalFrame {Time=t,Kick=0,Hat=(int)t},pedalSettings); if (pr.JustClosed) slowVelocity=pr.CloseVelocity; }
+                Check(slowVelocity > 0 && slowVelocity < pedalSettings.PedalCloseVelocity,"Slow closing stays below optional close-hit threshold");
+                pedalSettings.KickRest=900; pedalSettings.KickDown=100; pedalSettings.HatRest=850; pedalSettings.HatDown=150; motion.Reset();
+                motion.Accept(new PedalFrame {Time=UInt32.MaxValue-3,Kick=900,Hat=850},pedalSettings);
+                pr=motion.Accept(new PedalFrame {Time=3,Kick=100,Hat=150},pedalSettings);
+                Check(pr.KickVelocity > 0 && pr.JustClosed,"Reversed calibration and millis wrap work");
+                Check(PedalMotion.Position(700,500,500) == 0,"Degenerate calibration cannot trigger");
+                using (var hatMixer=new AudioEngine()) {
+                    hatMixer.Volume=1; hatMixer.SetHatSamples(Enumerable.Repeat(.1f,4096).ToArray(),Enumerable.Repeat(.4f,4096).ToArray());
+                    var b=new short[1024]; hatMixer.Hit(0,127,1); hatMixer.MixBlock(b); int closedLevel=b[100];
+                    hatMixer.Panic(); hatMixer.Hit(0,127,2); hatMixer.MixBlock(b); Check(b[100] > closedLevel*3,"Mixer selects distinct open and closed hi-hat samples");
+                    hatMixer.ChokeHat(); hatMixer.MixBlock(b); Check(b[0] > 0 && b[500] == 0 && b[100] < b[0],"Pedal close fades open voice then silences it");
+                    using (var restarted=new AudioEngine()) { hatMixer.CopySamplesTo(restarted); restarted.Volume=1; restarted.Hit(0,127,2); restarted.MixBlock(b); Check(b[100] > closedLevel*3,"ASIO restart retains pedal samples"); }
+                }
                 Check(AsioOutput.Drivers() != null,"Embedded ASIO dependencies and driver discovery");
                 if (args.Contains("--asio-probe")) using (var asio = new AudioEngine()) {
                     asio.Volume = 0; asio.Start("Focusrite USB ASIO"); Thread.Sleep(1000);
@@ -191,6 +229,10 @@ namespace Pulse {
                 Check(SampleLibrary.Description("V08-TFlam-12.wav") == "12-inch · V08 · Flam (double hit)","Recorded flam clearly labeled");
                 Check(SampleLibrary.Description("TOM13-V05-StarClassic-13x13.wav") == "13-inch · V05 · Single hit","Kit 1 real tom size labeled");
                 if (library.Length > 0) {
+                    for (int kit=1;kit<=2;kit++) {
+                        string closed=SampleLibrary.HatArticulation(library,kit,false),open=SampleLibrary.HatArticulation(library,kit,true);
+                        Check(File.Exists(closed) && File.Exists(open) && closed != open && Path.GetFileName(closed).Contains("V05") && Path.GetFileName(open).Contains("V05"),"Real distinct V05 hi-hat pair for kit " + kit);
+                    }
                     for (int kit = 1; kit <= 2; kit++) { var presetFiles = SampleLibrary.Preset(library,kit); Check(presetFiles.All(File.Exists),"Eight working defaults for GSCW kit " + kit); Check(presetFiles.All(p => Path.GetFileName(p).ToUpperInvariant().Contains("V05")),"All eight preset defaults use V05 in kit " + kit); for (int part = 0; part < 8; part++) Check(SampleLibrary.Classify(Path.GetFileName(presetFiles[part])) == part,"Preset sample matches instrument " + part); }
                     foreach (var sample in library) { var data = WaveFile.Load(sample.Path); Check(data.Length % 2 == 0 && data.Any(v => Math.Abs(v) > .001),"Decode " + sample.Label); }
                     Console.WriteLine("Validated " + library.Length + " downloaded WAV samples.");

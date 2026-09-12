@@ -12,6 +12,14 @@ Requires Windows 10/11 x64, .NET Framework 4.8, a Windows audio output and your 
 
 ## Play
 
+### Pedal Nano (Pulse 2.3)
+
+A second Nano can read **A0 kick / A1 hi-hat potentiometers**, independently of the main piezo board. Upload the included [PulsePedals sketch](firmware/PulsePedals/PulsePedals.ino) once, then use the **Pedal Nano** panel to enable auto-detection and capture each pedal's released/pressed positions. [Full setup and wiring](firmware/PulsePedals/README.md).
+
+Pedal position selects V05 open/closed hi-hat sounds and closes ringing open hits with a short fade. An optional fast-close hit has an adjustable velocity minimum. **Kick from pedal only** ignores the main Arduino's kick while keeping other pads active. Auto-detection requires the pedal sketch's identity and data; the two connections share port reservations. The USB launch helper also recognizes a saved pedal Nano. Pedal sound options save in presets; calibration and device selection stay local. This release's firmware compiles for the Nano, but requires upload and physical calibration before live use.
+
+### Main kit
+
 Close Arduino Serial Monitor and the old drum bridge to free the port. Open Pulse, plug in the Nano, and hit a pad once to verify the serial protocol. Saved thresholds are sent automatically. No Connect, Apply or Save-settings button is needed.
 
 The default view follows the numbered physical kit. Pieces glow on a hit, independently and simultaneously. The three colour dots at the top right switch between **Green**, **Red**, and **Blue**; the selected dot has an outline. The USB/COM indicator is centred. Theme and view choices are remembered. Click a piece to tune it; double-click, press **1–8**, or use **Audition** to test its sound. **Classic controls** switches to the previous pad-card view.

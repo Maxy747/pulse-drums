@@ -1,1 +1,1 @@
-PASS: green/red/blue themes, kit/classic views, isolated hit glow, sliders, audition, calibrated reset, MIDI note mapping, learn cancel, all-eight assignment, undo after completion, repeated undo, preset restore. No hardware or user settings writes.
+PASS: kit and classic views, themes, audio controls, learn/undo, preset restore, pedal toggles, kick-only routing, optional close hits, calibration and UI rendering. No hardware or user settings writes.

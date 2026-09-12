@@ -19,6 +19,12 @@ namespace Pulse {
             }).ToArray();
         }
         public static bool IsTom(int part) { return part == 2 || part == 4 || part == 6; }
+        public static string HatArticulation(SampleChoice[] choices, int kit, bool open) {
+            string token = open ? "-op" : "-cl";
+            return choices.Where(c => c.Part == 0 && System.IO.Path.GetFileName(c.Path).ToLowerInvariant().Contains(token))
+                .OrderByDescending(c => c.KitNumber == kit).ThenByDescending(c => System.IO.Path.GetFileName(c.Path).ToLowerInvariant().Contains("v05"))
+                .ThenBy(c => c.Path).Select(c => c.Path).FirstOrDefault() ?? "";
+        }
         public static bool CanChoose(int part, int category) { return part == category || (IsTom(part) && IsTom(category)); }
         public static string Description(string path) {
             string name = System.IO.Path.GetFileNameWithoutExtension(path);

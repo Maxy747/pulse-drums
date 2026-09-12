@@ -1,4 +1,14 @@
-Pulse 2.2.2 — tom sound selection.
+Pulse 2.3.0 — separate pedal Nano.
+
+- Included Nano firmware streams A0 kick and A1 hi-hat potentiometers at 115200 baud with a distinct identity. Compiled for Nano/ATmega328P using Arduino AVR Boards 1.8.7 (2,390 bytes flash, 200 bytes RAM).
+- Separate auto/manual pedal device selection, reconnect, port reservations and saved identity. Main drums remain on their existing protocol; the USB launcher can also recognize the pedal Nano.
+- Released/pressed calibration and live meters support either potentiometer direction. Hysteresis prevents repeated held hits; startup and stream gaps suppress phantom strokes.
+- Main hi-hat strikes select V05 open/closed recordings from the selected hat kit. Closure fades open voices over 5 ms. Optional fast-close sound with minimum velocity, plus pedal-only kick mode before session counting/audio/MIDI.
+- MIDI hat notes 42/46, CC4 pedal position and open-note termination on close. Existing ASIO, reverb and stereo placement apply to pedal sounds.
+- Pedal musical options persist in named presets; device and calibration stay local. No firmware is automatically uploaded.
+- Validation: 559 local assertions, 360 WAV decodes, WPF pedal controls/routing/calibration/render checks and Nano firmware compilation. Physical pedal travel and feel still need calibration after upload.
+
+Retained from 2.2.2 — tom sound selection:
 
 - Low, Mid and Floor tom selectors now offer both kits' tom recordings, labeled with actual size, velocity layer and single-hit versus flam articulation.
 - V05 single hits sort before flams. Kit 1's real 10/13-inch recordings are available as alternatives; no missing 12-inch recording is invented.

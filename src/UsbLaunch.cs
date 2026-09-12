@@ -10,6 +10,7 @@ namespace Pulse {
     public static class UsbLaunch {
         const string StopName = "Local\\PulseDrumsUsbWatchStop";
         public static bool Matches(PortInfo port, Settings settings) {
+            if (settings.PedalsEnabled && ((settings.PedalDeviceId != "" && String.Equals(port.Id,settings.PedalDeviceId,StringComparison.OrdinalIgnoreCase)) || (settings.PedalDeviceId == "" && settings.PedalPort != "" && port.Name == settings.PedalPort))) return true;
             if (!String.IsNullOrEmpty(settings.DeviceId)) return String.Equals(port.Id,settings.DeviceId,StringComparison.OrdinalIgnoreCase);
             return port.Candidate && (settings.Port == "" || port.Name == settings.Port);
         }

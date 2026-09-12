@@ -110,9 +110,10 @@ namespace Pulse {
         void ReceiveInput(Frame f) {
             if (learning) { if (f.Kind == "RAW") Enqueue(new Frame("LEARN",f.Index,f.Value)); return; }
             int part = live.PartForInput(f.Index); if (part < 0) return;
+            if (part == 5 && live.PedalOnlyKick) return;
             if (f.Kind == "HIT") { if (smoke) Hit(part,f.Value,false); else { triggerFilter.Push(f,live,clock.ElapsedMilliseconds); triggerFilter.Flush(live,clock.ElapsedMilliseconds,AcceptTrigger); } } else if (f.Kind == "RAW") Enqueue(new Frame("RAW",part,f.Value));
         }
-        void AcceptTrigger(Frame frame) { if (learning || exiting) return; int part = live.PartForInput(frame.Index); if (part >= 0) Hit(part,frame.Value,false); }
+        void AcceptTrigger(Frame frame) { if (learning || exiting) return; int part = live.PartForInput(frame.Index); if (part >= 0 && !(part == 5 && live.PedalOnlyKick)) Hit(part,frame.Value,false); }
         void RestartAudio() {
             if (smoke || audio == null || exiting) return;
             var replacement = new AudioEngine(); replacement.Volume = (float)settings.Volume; replacement.OutputGain = (float)Math.Pow(10,settings.OutputGainDb/20); replacement.ReverbEnabled = settings.ReverbEnabled; replacement.ReverbAmount = (float)settings.ReverbAmount;
@@ -163,6 +164,7 @@ namespace Pulse {
             FixSampleTypes();
             for (int i = 0; i < 8; i++) LoadSample(i,settings.SampleFiles[i],false);
             RefreshSampleChoices();
+            LoadPedalHats();
         }
         void RefreshSampleChoices() {
             var cb = Get<ComboBox>("SampleCombo"); if (cb == null) return;
@@ -191,6 +193,7 @@ namespace Pulse {
                         sampleStates[part] = path == "" ? "Pulse synth · ready" : "WAV ready · " + (sample.Length / 2.0 / AudioEngine.Rate).ToString("0.0") + " s · stereo";
                         logs.Enqueue(Kit.Names[part] + " sound ready: " + (path == "" ? "Pulse synth" : Path.GetFileName(path)));
                         if (saveSelection) { settings.SampleFiles[part] = path; settings.SampleDefaultsApplied = true; Changed(false); }
+                        if (part == 0) LoadPedalHats();
                         RefreshSampleChoices();
                     }));
                 } catch (Exception e) { if (exiting || Window.Dispatcher.HasShutdownStarted) return; Window.Dispatcher.BeginInvoke(new Action(() => { if (exiting || sampleVersions[part] != version) return; sampleStates[part] = "Could not load WAV · previous sound kept"; logs.Enqueue(Kit.Names[part] + ": " + e.Message); RefreshSampleChoices(); })); }
@@ -209,6 +212,8 @@ namespace Pulse {
             settings.ReverbEnabled = preset.ReverbEnabled; settings.ReverbAmount = preset.ReverbAmount;
             settings.OutputGainDb = preset.OutputGainDb;
             settings.PlayerStereoEnabled = preset.PlayerStereoEnabled; settings.PlayerStereoWidth = preset.PlayerStereoWidth;
+            settings.PedalCloseHit=preset.PedalCloseHit; settings.PedalOnlyKick=preset.PedalOnlyKick; settings.PedalCloseVelocity=preset.PedalCloseVelocity;
+            RefreshPedalControls();
             settings.Transpose = preset.Transpose; settings.NoteOffMs = preset.NoteOffMs;
             settings.CrosstalkPercent = preset.CrosstalkPercent; settings.ProtectionDefaultsApplied = true; triggerFilter.Clear(); Get<Slider>("CrosstalkSlider").Value = settings.CrosstalkPercent;
             FixSampleTypes();

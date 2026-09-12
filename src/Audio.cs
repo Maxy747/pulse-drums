@@ -17,7 +17,10 @@ namespace Pulse {
         [DllImport("winmm.dll")] static extern uint waveOutClose(IntPtr device);
         [DllImport("avrt.dll", CharSet = CharSet.Unicode)] static extern IntPtr AvSetMmThreadCharacteristics(string taskName, ref uint taskIndex);
         [DllImport("avrt.dll")] static extern bool AvRevertMmThreadCharacteristics(IntPtr handle);
-        class Voice { public float[] Sample; public int Position, Part; public float Gain; }
+        class Voice { public float[] Sample; public int Position, Part, Choke; public float Gain; public bool OpenHat; }
+        float[] openHat, closedHat;
+        public void SetHatSamples(float[] closed, float[] open) { lock (gate) { closedHat=closed; openHat=open; } }
+        public void ChokeHat() { lock (gate) foreach (var v in voices) if (v.OpenHat && v.Choke == 0) v.Choke=240; }
         readonly PlayerStereo spatial = new PlayerStereo();
         bool spatialEnabled; double spatialWidth;
         public void ConfigureStereo(bool enabled, double width) { lock (gate) { if (enabled == spatialEnabled && width == spatialWidth) return; spatialEnabled = enabled; spatialWidth = width; spatial.Configure(enabled,width); } }
@@ -45,11 +48,16 @@ namespace Pulse {
         public volatile float ReverbAmount = .25f;
         public AsioOutput Asio;
         public string OutputStatus = "Windows default · 32 ms buffer";
-        public void CopySamplesTo(AudioEngine target) { lock (gate) for (int i = 0; i < 8; i++) target.SetSample(i,samples[i]); }
+        public void CopySamplesTo(AudioEngine target) { lock (gate) { for (int i = 0; i < 8; i++) target.SetSample(i,samples[i]); target.SetHatSamples(closedHat,openHat); } }
         volatile bool stop;
         public volatile string Error = "";
         public float Volume = .7f;
-        public AudioEngine() { for (int i = 0; i < 8; i++) samples[i] = WaveFile.Stereo(Synthesize(Kit.DefaultInputs[i])); }
+        public AudioEngine() {
+            for (int i = 0; i < 8; i++) samples[i] = WaveFile.Stereo(Synthesize(Kit.DefaultInputs[i]));
+            closedHat=samples[0]; var open=new float[Rate]; var random=new Random(1042);
+            for (int i=0;i<open.Length;i++) { double t=i/(double)Rate; open[i]=(float)((random.NextDouble()*2-1)*Math.Exp(-t*5)*Math.Min(1,t*3000)*Math.Min(1,(1-t)*100)*.5); }
+            openHat=WaveFile.Stereo(open);
+        }
         public void SetSample(int part, float[] sample) { lock (gate) samples[part] = sample; }
         public static float[] Synthesize(int pad) {
             double length = pad == 6 ? 1.5 : pad == 7 ? 1.1 : pad == 2 ? .16 : .65;
@@ -84,7 +92,7 @@ namespace Pulse {
                 worker = new Thread(Pump) { IsBackground = true, Priority = ThreadPriority.AboveNormal, Name = "Pulse audio" }; worker.Start();
             } catch (Exception e) { Error = e.Message; Release(); }
         }
-        public void Hit(int pad, int velocity) { lock (gate) { if (voices.Count >= 48) voices.RemoveAt(0); voices.Add(new Voice { Sample = samples[pad], Part = pad, Gain = velocity / 127f }); } }
+        public void Hit(int pad, int velocity, int hatMode = 0) { lock (gate) { if (voices.Count >= 48) voices.RemoveAt(0); voices.Add(new Voice { Sample = pad == 0 && hatMode != 0 ? ((hatMode == 2 ? openHat : closedHat) ?? samples[pad]) : samples[pad], Part = pad, Gain = velocity / 127f, OpenHat=pad == 0 && hatMode == 2 }); } }
         public void Panic() { lock (gate) { voices.Clear(); reverb.Clear(); limiterGain = 1; } }
         internal void MixBlock(short[] output, int length = -1) {
             if (length < 0) length = output.Length;
@@ -94,6 +102,7 @@ namespace Pulse {
                     spatial.Step();
                     foreach (var v in voices) if (v.Position + 1 < v.Sample.Length) {
                         double l = v.Sample[v.Position++] * v.Gain, r = v.Sample[v.Position++] * v.Gain;
+                        if (v.Choke > 0) { l *= v.Choke/240.0; r *= v.Choke/240.0; if (--v.Choke == 0) v.Position=v.Sample.Length; }
                         spatial.Process(v.Part,ref l,ref r); left += l; right += r;
                     }
                     reverb.Process(ref left,ref right,ReverbAmount,ReverbEnabled);

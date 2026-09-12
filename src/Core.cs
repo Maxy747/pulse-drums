@@ -20,6 +20,16 @@ namespace Pulse {
         public Pad Copy() { return (Pad)MemberwiseClone(); }
     }
     public class Settings {
+        public bool PedalsEnabled { get; set; }
+        public string PedalPort { get; set; }
+        public string PedalDeviceId { get; set; }
+        public bool PedalCloseHit { get; set; }
+        public bool PedalOnlyKick { get; set; }
+        public int PedalCloseVelocity { get; set; }
+        public int KickRest { get; set; }
+        public int KickDown { get; set; }
+        public int HatRest { get; set; }
+        public int HatDown { get; set; }
         public Pad[] Pads { get; set; }
         public double Volume { get; set; }
         public double OutputGainDb { get; set; }
@@ -47,6 +57,7 @@ namespace Pulse {
         public int Transpose { get; set; }
         public int NoteOffMs { get; set; }
         public Settings() {
+            PedalPort = ""; PedalDeviceId = ""; KickDown = HatDown = 1023; PedalCloseVelocity = 50;
             PlayerStereoEnabled = true; PlayerStereoWidth = 1;
             ReverbAmount = .25;
             Pads = Enumerable.Range(0,8).Select(i => new Pad { Note = Protocol.Notes[i], Hit = Kit.TriggerDefaults[i], Reset = Kit.ResetDefaults[i], Gain = 1, Curve = .6, VelocityFloor = 50, RetriggerMs = 0 }).ToArray();
@@ -54,6 +65,10 @@ namespace Pulse {
         }
         public Settings Copy() { var s = (Settings)MemberwiseClone(); s.Pads = Pads.Select(p => p.Copy()).ToArray(); s.Inputs = Inputs == null ? null : (int[])Inputs.Clone(); s.InstrumentNotes = InstrumentNotes == null ? null : (int[])InstrumentNotes.Clone(); s.SampleFiles = SampleFiles == null ? null : (string[])SampleFiles.Clone(); return s; }
         public void Normalize() {
+            PedalPort = PedalPort ?? ""; PedalDeviceId = PedalDeviceId ?? "";
+            PedalCloseVelocity = Math.Max(1,Math.Min(127,PedalCloseVelocity));
+            KickRest = Math.Max(0,Math.Min(1023,KickRest)); KickDown = Math.Max(0,Math.Min(1023,KickDown));
+            HatRest = Math.Max(0,Math.Min(1023,HatRest)); HatDown = Math.Max(0,Math.Min(1023,HatDown));
             PlayerStereoWidth = Clamp(PlayerStereoWidth,0,1);
             OutputGainDb = Clamp(OutputGainDb,0,18);
             ReverbAmount = Clamp(ReverbAmount,0,1);
@@ -121,6 +136,7 @@ namespace Pulse {
         public static readonly string[] Names = {"Kick", "Snare", "Hi-hat", "Tom 1", "Tom 2", "Floor tom", "Crash", "Ride"};
         public static bool Parse(string line, out Frame frame) {
             frame = new Frame(); if (line == null || line.Length > 64) return false;
+            if (line.Trim() == "PULSE_PEDALS,1") { frame = new Frame("PEDALDEVICE",0,1); return true; }
             var p = line.Trim().Split(','); int a, b;
             if (p.Length != 3 || !Int32.TryParse(p[1], NumberStyles.None, CultureInfo.InvariantCulture, out a) || !Int32.TryParse(p[2], NumberStyles.None, CultureInfo.InvariantCulture, out b)) return false;
             if (p[0] == "NOTE" && a >= 0 && a <= 127 && b >= 0 && b <= 127) { frame = new Frame("NOTE", a, b); return true; }

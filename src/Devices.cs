@@ -26,6 +26,9 @@ namespace Pulse {
         volatile bool settingsDirty = true;
         public volatile bool Verified;
         string lastStatus = "";
+        string claimed = "";
+        bool pedalDevice;
+        readonly HashSet<string> pedalPorts = new HashSet<string>();
         int candidateIndex;
         readonly Stopwatch watch = Stopwatch.StartNew();
         long opened, lastCommand;
@@ -73,10 +76,14 @@ namespace Pulse {
                     var cfg = config;
                     if (port != null && !ports.Any(p => p.Name == port.PortName && p.Id == currentId)) Disconnect();
                     if (port != null && connectedPreference != cfg.Port) Disconnect();
+                    if (port != null && (port.PortName == cfg.PedalPort || (cfg.PedalDeviceId != "" && currentId == cfg.PedalDeviceId))) Disconnect();
                     if (port == null) {
-                        var candidates = String.IsNullOrEmpty(cfg.Port) ? ports.Where(p => p.Candidate).OrderByDescending(p => p.Id == cfg.DeviceId).ToArray() : ports.Where(p => p.Name == cfg.Port).ToArray();
+                        var allowed = ports.Where(p => !pedalPorts.Contains(p.Name + p.Id) && !(p.Name == cfg.PedalPort || (cfg.PedalDeviceId != "" && p.Id == cfg.PedalDeviceId)));
+                        var candidates = String.IsNullOrEmpty(cfg.Port) ? allowed.Where(p => p.Candidate).OrderByDescending(p => p.Id == cfg.DeviceId).ToArray() : allowed.Where(p => p.Name == cfg.Port).ToArray();
                         if (candidates.Length == 0) { SetStatus(String.IsNullOrEmpty(cfg.Port) ? "Waiting for your drums" : cfg.Port + " unplugged · waiting", false); Thread.Sleep(200); continue; }
                         var next = candidates[candidateIndex % candidates.Length]; desired = next.Name; currentId = next.Id;
+                        if (!SerialClaims.Take(next.Name)) { candidateIndex++; Thread.Sleep(100); continue; }
+                        claimed = next.Name; pedalDevice=false;
                         connectedPreference = cfg.Port;
                         port = new SerialPort(next.Name, 115200) { ReadTimeout = 80, WriteTimeout = 200, DtrEnable = true, RtsEnable = false, NewLine = "\n" };
                         port.Open(); opened = watch.ElapsedMilliseconds; decoder = new LineDecoder(); pairer = new HitPairer();
@@ -85,6 +92,7 @@ namespace Pulse {
                         if (Log != null) Log("Listening on " + next.Label + " at 115200 baud.");
                     }
                     if (port.BytesToRead > 0) decoder.Feed(port.ReadExisting(), HandleFrame);
+                    if (pedalDevice) { pedalPorts.Add(port.PortName + currentId); Disconnect(); continue; }
                     if (Verified && watch.ElapsedMilliseconds - opened > 1800) {
                         if (settingsDirty) { settingsDirty = false; commands = new Queue<string>(Protocol.Thresholds(config)); }
                         // Pace complete lines to avoid overflowing the Nano's small receive buffer.
@@ -107,6 +115,7 @@ namespace Pulse {
         }
         string lastError = "";
         void HandleFrame(Frame frame) {
+            if (frame.Kind == "PEDALDEVICE") { pedalDevice=true; return; }
             long now = watch.ElapsedMilliseconds;
             Frame hit;
             if (pairer.Accept(frame, now, out hit)) {
@@ -123,6 +132,7 @@ namespace Pulse {
         void Disconnect() {
             Verified = false; commands.Clear();
             if (port != null) { try { port.Dispose(); } catch { } port = null; }
+            if (claimed != "") { SerialClaims.Release(claimed); claimed=""; }
         }
         public void Dispose() { stop = true; if (worker != null) worker.Join(3000); if (scanner != null) scanner.Join(2000); }
     }

@@ -17,6 +17,8 @@ if (Test-Path -LiteralPath $exePath) {
     }
 }
 Copy-Item -LiteralPath $source -Destination $exePath -Force
+$firmwareFolder = Join-Path $PSScriptRoot 'firmware'
+if (Test-Path -LiteralPath $firmwareFolder) { Copy-Item -LiteralPath $firmwareFolder -Destination $installFolder -Recurse -Force }
 if ($ImportCurrentKit) {
     $settingsFolder = Join-Path $env:LOCALAPPDATA 'PulseDrums'
     $settingsPath = Join-Path $settingsFolder 'settings.xml'
