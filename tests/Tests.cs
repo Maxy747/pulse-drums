@@ -26,6 +26,8 @@ namespace Pulse {
                 Check(PedalConnection.Candidate(new PortInfo {Name="COM4",Id="PEDAL",Candidate=true},pedalSettings),"Pedal scan accepts separate Nano");
                 pedalSettings.PedalDeviceId="PEDAL"; Check(UsbLaunch.Matches(new PortInfo {Name="COM9",Id="PEDAL"},pedalSettings),"USB launch follows pedal identity after COM change");
                 var motion=new PedalMotion();
+                var sourceSettings=new Settings {PedalOnlyKick=true,MainDrumsOnlyKick=true}; sourceSettings.Normalize();
+                Check(sourceSettings.MainDrumsOnlyKick && !sourceSettings.PedalOnlyKick,"Conflicting saved kick modes normalize to one source");
                 var swappedSettings=pedalSettings.Copy(); swappedSettings.KickRest=100; swappedSettings.KickDown=800; swappedSettings.HatRest=900; swappedSettings.HatDown=200;
                 swappedSettings.SetPedalSwap(true);
                 Check(swappedSettings.SwapPedalInputs && swappedSettings.KickRest == 900 && swappedSettings.KickDown == 200 && swappedSettings.HatRest == 100 && swappedSettings.HatDown == 800,"Swap preserves physical input calibration");

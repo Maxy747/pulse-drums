@@ -1,4 +1,10 @@
-Pulse 2.3.1 — swap pedal inputs.
+Pulse 2.3.2 — main drums only kick.
+
+- Added Kick from main drums only to suppress pedal kick events before sound, MIDI and session counting, while retaining hi-hat pedal operation.
+- The two kick-only toggles are mutually exclusive. Both off permits both sources. Settings persist on this PC and in named presets.
+- Validated 564 assertions and UI routing tests covering both exclusive modes, both-source mode and preserved hi-hat pedal state.
+
+Retained from 2.3.1 — swap pedal inputs:
 
 - Added Swap kick / hi-hat inputs: on maps A1 to kick and A0 to hi-hat; off restores A0 kick and A1 hi-hat.
 - Calibration follows the physical input. Live labels, meters, hit detection and MIDI pedal position use the selected mapping. Switching resets motion tracking without generating a hit.

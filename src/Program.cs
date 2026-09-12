@@ -402,6 +402,20 @@ namespace Pulse {
                 if (hits != beforeSwap+1 || hatClosed || !Get<TextBlock>("KickPedalValue").Text.StartsWith("A1")) throw new Exception("Swapped A1 kick routing failed");
                 ReceivePedals(new PedalFrame {Time=60,Kick=900,Hat=900}); Tick();
                 if (hits != beforeSwap+1 || !hatClosed || !Get<TextBlock>("HatPedalValue").Text.StartsWith("A0")) throw new Exception("Swapped A0 hi-hat routing failed");
+                Get<CheckBox>("MainKickOnlyToggle").IsChecked=true;
+                if (!live.MainDrumsOnlyKick || live.PedalOnlyKick || Get<CheckBox>("PedalKickOnlyToggle").IsChecked == true) throw new Exception("Main drums only did not disable pedal-only mode");
+                int beforeMainOnly=hits;
+                ReceivePedals(new PedalFrame {Time=70,Kick=0,Hat=0}); ReceivePedals(new PedalFrame {Time=80,Kick=900,Hat=900}); Tick();
+                if (hits != beforeMainOnly || !hatClosed) throw new Exception("Main-only mode must ignore pedal kick and retain hi-hat state");
+                ReceiveInput(new Frame("HIT",settings.Inputs[5],100)); Tick();
+                if (hits != beforeMainOnly+1) throw new Exception("Main kick not accepted in main-only mode");
+                Get<CheckBox>("PedalKickOnlyToggle").IsChecked=true;
+                if (live.MainDrumsOnlyKick || !live.PedalOnlyKick || Get<CheckBox>("MainKickOnlyToggle").IsChecked == true) throw new Exception("Pedal-only mode did not disable main-only mode");
+                Get<CheckBox>("PedalKickOnlyToggle").IsChecked=false;
+                ReceivePedals(new PedalFrame {Time=90,Kick=0,Hat=0}); ReceivePedals(new PedalFrame {Time=100,Kick=0,Hat=900});
+                ReceiveInput(new Frame("HIT",settings.Inputs[5],100)); Tick();
+                if (hits != beforeMainOnly+3) throw new Exception("Both toggles off must allow both kick sources");
+                Get<CheckBox>("MainKickOnlyToggle").IsChecked=true;
                 Get<TextBlock>("PedalCalibrationHint").BringIntoView(); Window.UpdateLayout(); Screenshot(System.IO.Path.Combine(folder,"pulse-pedals.png"));
                 File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"PASS: kit and classic views, themes, audio controls, learn/undo, preset restore, pedal toggles, kick-only routing, optional close hits, calibration and UI rendering. No hardware or user settings writes.");
             } catch (Exception e) { File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"FAIL: " + e); Environment.ExitCode = 1; }

@@ -26,6 +26,7 @@ namespace Pulse {
         public string PedalDeviceId { get; set; }
         public bool PedalCloseHit { get; set; }
         public bool PedalOnlyKick { get; set; }
+        public bool MainDrumsOnlyKick { get; set; }
         public int PedalCloseVelocity { get; set; }
         public int KickRest { get; set; }
         public int KickDown { get; set; }
@@ -66,6 +67,7 @@ namespace Pulse {
         }
         public Settings Copy() { var s = (Settings)MemberwiseClone(); s.Pads = Pads.Select(p => p.Copy()).ToArray(); s.Inputs = Inputs == null ? null : (int[])Inputs.Clone(); s.InstrumentNotes = InstrumentNotes == null ? null : (int[])InstrumentNotes.Clone(); s.SampleFiles = SampleFiles == null ? null : (string[])SampleFiles.Clone(); return s; }
         public void Normalize() {
+            if (MainDrumsOnlyKick) PedalOnlyKick=false;
             PedalPort = PedalPort ?? ""; PedalDeviceId = PedalDeviceId ?? "";
             PedalCloseVelocity = Math.Max(1,Math.Min(127,PedalCloseVelocity));
             KickRest = Math.Max(0,Math.Min(1023,KickRest)); KickDown = Math.Max(0,Math.Min(1023,KickDown));

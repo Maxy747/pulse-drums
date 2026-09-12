@@ -34,11 +34,21 @@ namespace Pulse {
                 if (pedalUpdating) return;
                 settings.PedalsEnabled=Get<CheckBox>("PedalsToggle").IsChecked == true;
                 settings.PedalCloseHit=Get<CheckBox>("PedalCloseToggle").IsChecked == true;
-                settings.PedalOnlyKick=Get<CheckBox>("PedalKickOnlyToggle").IsChecked == true;
                 lock (pedalGate) { Changed(false); pedalMotion.Reset(); }
                 LoadPedalHats();
             };
-            foreach (string name in new[] { "PedalsToggle","PedalCloseToggle","PedalKickOnlyToggle" }) { Get<CheckBox>(name).Checked += change; Get<CheckBox>(name).Unchecked += change; }
+            foreach (string name in new[] { "PedalsToggle","PedalCloseToggle" }) { Get<CheckBox>(name).Checked += change; Get<CheckBox>(name).Unchecked += change; }
+            RoutedEventHandler sourceChange = (sender,e) => {
+                if (pedalUpdating) return;
+                bool pedal=Get<CheckBox>("PedalKickOnlyToggle").IsChecked == true;
+                bool main=Get<CheckBox>("MainKickOnlyToggle").IsChecked == true;
+                if (sender == Get<CheckBox>("MainKickOnlyToggle") && main) pedal=false;
+                if (sender == Get<CheckBox>("PedalKickOnlyToggle") && pedal) main=false;
+                settings.PedalOnlyKick=pedal; settings.MainDrumsOnlyKick=main;
+                lock (pedalGate) { Changed(false); pedalMotion.Reset(); }
+                triggerFilter.Clear(); RefreshPedalControls();
+            };
+            foreach (string name in new[] { "PedalKickOnlyToggle","MainKickOnlyToggle" }) { Get<CheckBox>(name).Checked += sourceChange; Get<CheckBox>(name).Unchecked += sourceChange; }
             Get<Slider>("PedalCloseSlider").ValueChanged += delegate { if (pedalUpdating) return; settings.PedalCloseVelocity=(int)Get<Slider>("PedalCloseSlider").Value; Get<TextBlock>("PedalCloseValue").Text=settings.PedalCloseVelocity.ToString(); Changed(false); };
             Get<ComboBox>("PedalPortCombo").SelectionChanged += delegate { if (pedalUpdating) return; var choice=Get<ComboBox>("PedalPortCombo").SelectedItem as PortInfo; if (choice == null) return; settings.PedalPort=choice.Name; settings.PedalDeviceId=choice.Id; Changed(false); };
             foreach (string name in new[] { "KickRest","KickDown","HatRest","HatDown" }) {
@@ -58,6 +68,7 @@ namespace Pulse {
             Get<CheckBox>("PedalSwapToggle").IsChecked=settings.SwapPedalInputs;
             Get<CheckBox>("PedalCloseToggle").IsChecked=settings.PedalCloseHit;
             Get<CheckBox>("PedalKickOnlyToggle").IsChecked=settings.PedalOnlyKick;
+            Get<CheckBox>("MainKickOnlyToggle").IsChecked=settings.MainDrumsOnlyKick;
             Get<Slider>("PedalCloseSlider").Value=settings.PedalCloseVelocity;
             Get<TextBlock>("PedalCloseValue").Text=settings.PedalCloseVelocity.ToString();
             pedalUpdating=false;
@@ -87,7 +98,7 @@ namespace Pulse {
                 if (cfg.MidiEnabled) midi.StopNote(Math.Max(0,Math.Min(127,46+cfg.Transpose)),cfg.Channel);
                 if (cfg.PedalCloseHit && result.CloseVelocity >= cfg.PedalCloseVelocity) Hit(0,result.CloseVelocity,false,true);
             }
-            if (result.KickVelocity > 0) Hit(5,result.KickVelocity,false);
+            if (result.KickVelocity > 0 && !cfg.MainDrumsOnlyKick) Hit(5,result.KickVelocity,false);
         }
         void TickPedals() {
             if (pedalIdentified != null) { settings.PedalDeviceId=pedalIdentified; pedalIdentified=null; Changed(false); }

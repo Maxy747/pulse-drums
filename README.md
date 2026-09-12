@@ -14,6 +14,8 @@ Requires Windows 10/11 x64, .NET Framework 4.8, a Windows audio output and your 
 
 ### Pedal Nano (Pulse 2.3)
 
+**Kick from main drums only** accepts kick hits from the main Arduino and ignores pedal kick hits while retaining the hi-hat pedal. It and **Kick from pedal only** automatically turn each other off. With both off, either kick source works. Both settings save on this PC and in named presets.
+
 **Swap kick / hi-hat inputs** switches between A0 kick / A1 hi-hat and A1 kick / A0 hi-hat. The meters update and calibration follows each input. The switch is remembered on this PC; no Arduino firmware change is needed.
 
 A second Nano can read **A0 kick / A1 hi-hat potentiometers**, independently of the main piezo board. Upload the included [PulsePedals sketch](firmware/PulsePedals/PulsePedals.ino) once, then use the **Pedal Nano** panel to enable auto-detection and capture each pedal's released/pressed positions. [Full setup and wiring](firmware/PulsePedals/README.md).

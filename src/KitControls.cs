@@ -213,6 +213,7 @@ namespace Pulse {
             settings.OutputGainDb = preset.OutputGainDb;
             settings.PlayerStereoEnabled = preset.PlayerStereoEnabled; settings.PlayerStereoWidth = preset.PlayerStereoWidth;
             settings.PedalCloseHit=preset.PedalCloseHit; settings.PedalOnlyKick=preset.PedalOnlyKick; settings.PedalCloseVelocity=preset.PedalCloseVelocity;
+            settings.MainDrumsOnlyKick=preset.MainDrumsOnlyKick;
             RefreshPedalControls();
             settings.Transpose = preset.Transpose; settings.NoteOffMs = preset.NoteOffMs;
             settings.CrosstalkPercent = preset.CrosstalkPercent; settings.ProtectionDefaultsApplied = true; triggerFilter.Clear(); Get<Slider>("CrosstalkSlider").Value = settings.CrosstalkPercent;

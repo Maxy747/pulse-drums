@@ -11,6 +11,8 @@ Each pot's middle terminal (wiper) connects to its analog input; its outside ter
 
 ## Playing
 
+- **Kick from main drums only** disables pedal kick sounds/counts while allowing the main kick and hi-hat pedal. Enabling either kick-only toggle disables the other; both off allows both sources. The choice saves in named presets.
+
 - **Swap kick / hi-hat inputs** changes to A1 kick / A0 hi-hat. Turn it off for A0 kick / A1 hi-hat. Calibration follows the physical inputs, and the choice stays local with calibration across preset loads. Keep the same Arduino sketch; no re-upload is needed.
 
 - Strike the main hi-hat pad: pedal pressed selects a closed V05 hi-hat, released selects open V05. The pair follows the kit of the selected hi-hat WAV. Without the sample library, distinct synthesized open/closed hats are used.
