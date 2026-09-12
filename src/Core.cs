@@ -21,6 +21,7 @@ namespace Pulse {
     }
     public class Settings {
         public bool PedalsEnabled { get; set; }
+        public bool SwapPedalInputs { get; set; }
         public string PedalPort { get; set; }
         public string PedalDeviceId { get; set; }
         public bool PedalCloseHit { get; set; }
@@ -94,6 +95,12 @@ namespace Pulse {
             Transpose = Math.Max(-48,Math.Min(48,Transpose)); NoteOffMs = Math.Max(1,Math.Min(500,NoteOffMs));
         }
         public int PartForInput(int input) { return Array.IndexOf(Inputs, input); }
+        public void SetPedalSwap(bool swap) {
+            if (SwapPedalInputs == swap) return;
+            int rest=KickRest,down=KickDown;
+            KickRest=HatRest; KickDown=HatDown; HatRest=rest; HatDown=down;
+            SwapPedalInputs=swap;
+        }
         static double Clamp(double v, double min, double max) { return Double.IsNaN(v) || Double.IsInfinity(v) ? min : Math.Max(min, Math.Min(max, v)); }
     }
     public static class Kit {

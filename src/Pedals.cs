@@ -28,6 +28,7 @@ namespace Pulse {
     public struct PedalResult { public bool Closed, JustClosed; public int KickVelocity, CloseVelocity; }
     // Potentiometers measure travel; velocity is estimated from the fastest downward motion.
     public sealed class PedalMotion {
+        public static PedalFrame MapInputs(PedalFrame f, bool swap) { return swap ? new PedalFrame {Time=f.Time,Kick=f.Hat,Hat=f.Kick} : f; }
         bool initialized, closed, kickArmed; uint last;
         double kick,hat,kickSpeed,hatSpeed;
         public void Reset() { initialized = false; }

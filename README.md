@@ -14,6 +14,8 @@ Requires Windows 10/11 x64, .NET Framework 4.8, a Windows audio output and your 
 
 ### Pedal Nano (Pulse 2.3)
 
+**Swap kick / hi-hat inputs** switches between A0 kick / A1 hi-hat and A1 kick / A0 hi-hat. The meters update and calibration follows each input. The switch is remembered on this PC; no Arduino firmware change is needed.
+
 A second Nano can read **A0 kick / A1 hi-hat potentiometers**, independently of the main piezo board. Upload the included [PulsePedals sketch](firmware/PulsePedals/PulsePedals.ino) once, then use the **Pedal Nano** panel to enable auto-detection and capture each pedal's released/pressed positions. [Full setup and wiring](firmware/PulsePedals/README.md).
 
 Pedal position selects V05 open/closed hi-hat sounds and closes ringing open hits with a short fade. An optional fast-close hit has an adjustable velocity minimum. **Kick from pedal only** ignores the main Arduino's kick while keeping other pads active. Auto-detection requires the pedal sketch's identity and data; the two connections share port reservations. The USB launch helper also recognizes a saved pedal Nano. Pedal sound options save in presets; calibration and device selection stay local. This release's firmware compiles for the Nano, but requires upload and physical calibration before live use.

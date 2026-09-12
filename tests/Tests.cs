@@ -26,6 +26,13 @@ namespace Pulse {
                 Check(PedalConnection.Candidate(new PortInfo {Name="COM4",Id="PEDAL",Candidate=true},pedalSettings),"Pedal scan accepts separate Nano");
                 pedalSettings.PedalDeviceId="PEDAL"; Check(UsbLaunch.Matches(new PortInfo {Name="COM9",Id="PEDAL"},pedalSettings),"USB launch follows pedal identity after COM change");
                 var motion=new PedalMotion();
+                var swappedSettings=pedalSettings.Copy(); swappedSettings.KickRest=100; swappedSettings.KickDown=800; swappedSettings.HatRest=900; swappedSettings.HatDown=200;
+                swappedSettings.SetPedalSwap(true);
+                Check(swappedSettings.SwapPedalInputs && swappedSettings.KickRest == 900 && swappedSettings.KickDown == 200 && swappedSettings.HatRest == 100 && swappedSettings.HatDown == 800,"Swap preserves physical input calibration");
+                swappedSettings.SetPedalSwap(true); Check(swappedSettings.KickRest == 900,"Same swap state cannot swap calibration twice");
+                var mapped=PedalMotion.MapInputs(new PedalFrame {Time=7,Kick=100,Hat=900},true);
+                Check(mapped.Time == 7 && mapped.Kick == 900 && mapped.Hat == 100,"Swap maps A1 to kick and A0 to hi-hat");
+                swappedSettings.SetPedalSwap(false); Check(swappedSettings.KickRest == 100 && swappedSettings.HatRest == 900,"Turning swap off restores calibration");
                 var pr=motion.Accept(new PedalFrame {Time=0,Kick=1023,Hat=1023},pedalSettings);
                 Check(pr.Closed && !pr.JustClosed && pr.KickVelocity == 0,"Connected while pressed does not generate phantom hit");
                 motion.Accept(new PedalFrame {Time=5,Kick=0,Hat=0},pedalSettings);

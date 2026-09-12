@@ -17,6 +17,19 @@ namespace Pulse {
         string pedalPortSignature = "";
         void BuildPedalControls() {
             RefreshPedalControls();
+            RoutedEventHandler swapInputs = delegate {
+                if (pedalUpdating) return;
+                lock (pedalGate) {
+                    bool swap=Get<CheckBox>("PedalSwapToggle").IsChecked == true;
+                    if (settings.SwapPedalInputs == swap) return;
+                    settings.SetPedalSwap(swap);
+                    int oldKick=kickRaw; kickRaw=hatRaw; hatRaw=oldKick;
+                    hatClosed=PedalMotion.Position(hatRaw,settings.HatRest,settings.HatDown) >= .75;
+                    pedalMotion.Reset(); lastPedalCc=-1; Changed(false);
+                }
+                midi.Panic(); var a=audio; if (a != null) a.ChokeHat(); TickPedals();
+            };
+            Get<CheckBox>("PedalSwapToggle").Checked += swapInputs; Get<CheckBox>("PedalSwapToggle").Unchecked += swapInputs;
             RoutedEventHandler change = delegate {
                 if (pedalUpdating) return;
                 settings.PedalsEnabled=Get<CheckBox>("PedalsToggle").IsChecked == true;
@@ -42,6 +55,7 @@ namespace Pulse {
         void RefreshPedalControls() {
             pedalUpdating=true;
             Get<CheckBox>("PedalsToggle").IsChecked=settings.PedalsEnabled;
+            Get<CheckBox>("PedalSwapToggle").IsChecked=settings.SwapPedalInputs;
             Get<CheckBox>("PedalCloseToggle").IsChecked=settings.PedalCloseHit;
             Get<CheckBox>("PedalKickOnlyToggle").IsChecked=settings.PedalOnlyKick;
             Get<Slider>("PedalCloseSlider").Value=settings.PedalCloseVelocity;
@@ -62,6 +76,7 @@ namespace Pulse {
             Settings cfg; PedalResult result;
             lock (pedalGate) {
                 cfg=live;
+                f=PedalMotion.MapInputs(f,cfg.SwapPedalInputs);
                 kickRaw=f.Kick; hatRaw=f.Hat; result=pedalMotion.Accept(f,cfg); hatClosed=result.Closed;
                 if (learning || !cfg.PedalsEnabled) return;
                 int cc=(int)Math.Round(PedalMotion.Position(f.Hat,cfg.HatRest,cfg.HatDown)*127);
@@ -77,8 +92,8 @@ namespace Pulse {
         void TickPedals() {
             if (pedalIdentified != null) { settings.PedalDeviceId=pedalIdentified; pedalIdentified=null; Changed(false); }
             Get<TextBlock>("PedalStatus").Text=pedalStatus + (pedalReady ? (hatClosed ? " · hi-hat closed" : " · hi-hat open") : "");
-            Get<TextBlock>("KickPedalValue").Text="A0 kick · " + kickRaw + "   Released " + settings.KickRest + " / Pressed " + settings.KickDown;
-            Get<TextBlock>("HatPedalValue").Text="A1 hi-hat · " + hatRaw + "   Released " + settings.HatRest + " / Pressed " + settings.HatDown;
+            Get<TextBlock>("KickPedalValue").Text=(settings.SwapPedalInputs ? "A1" : "A0") + " kick · " + kickRaw + "   Released " + settings.KickRest + " / Pressed " + settings.KickDown;
+            Get<TextBlock>("HatPedalValue").Text=(settings.SwapPedalInputs ? "A0" : "A1") + " hi-hat · " + hatRaw + "   Released " + settings.HatRest + " / Pressed " + settings.HatDown;
             Get<ProgressBar>("KickPedalMeter").Value=PedalMotion.Position(kickRaw,settings.KickRest,settings.KickDown)*100;
             Get<ProgressBar>("HatPedalMeter").Value=PedalMotion.Position(hatRaw,settings.HatRest,settings.HatDown)*100;
             Get<TextBlock>("PedalCalibrationHint").Text=Math.Abs(settings.KickDown-settings.KickRest) < 20 || Math.Abs(settings.HatDown-settings.HatRest) < 20 ? "Calibration needs at least 20 ADC counts of travel. Capture released and fully pressed again." : "Hold each position, then capture it. Reversed potentiometers are supported. Close velocity is estimated from pedal speed.";

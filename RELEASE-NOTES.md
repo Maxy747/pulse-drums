@@ -1,4 +1,11 @@
-Pulse 2.3.0 — separate pedal Nano.
+Pulse 2.3.1 — swap pedal inputs.
+
+- Added Swap kick / hi-hat inputs: on maps A1 to kick and A0 to hi-hat; off restores A0 kick and A1 hi-hat.
+- Calibration follows the physical input. Live labels, meters, hit detection and MIDI pedal position use the selected mapping. Switching resets motion tracking without generating a hit.
+- Mapping persists with this PC's calibration across preset loads. The existing Arduino sketch is unchanged.
+- Validated 563 assertions and UI tests for independent swapped kick and hi-hat routing.
+
+Retained from 2.3.0 — separate pedal Nano:
 
 - Included Nano firmware streams A0 kick and A1 hi-hat potentiometers at 115200 baud with a distinct identity. Compiled for Nano/ATmega328P using Arduino AVR Boards 1.8.7 (2,390 bytes flash, 200 bytes RAM).
 - Separate auto/manual pedal device selection, reconnect, port reservations and saved identity. Main drums remain on their existing protocol; the USB launcher can also recognize the pedal Nano.

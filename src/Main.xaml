@@ -80,6 +80,7 @@
             <TextBlock Text="PEDAL NANO" Style="{StaticResource Caption}"/>
             <CheckBox x:Name="PedalsToggle" Content="Enable pedal Nano" Margin="0,8,0,6"/>
             <ComboBox x:Name="PedalPortCombo" AutomationProperties.Name="Pedal Nano USB device"/>
+            <CheckBox x:Name="PedalSwapToggle" Content="Swap kick / hi-hat inputs" Margin="0,6,0,0" ToolTip="Off: A0 kick, A1 hi-hat. On: A1 kick, A0 hi-hat. Existing calibration follows each input. No new Arduino upload needed."/>
             <TextBlock x:Name="PedalStatus" Text="Waiting for pedal Nano" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,8"/>
             <CheckBox x:Name="PedalKickOnlyToggle" Content="Kick from pedal only" ToolTip="Ignore kick hits from the main Arduino, even if the pedal Nano is disconnected. Preview still works."/>
             <CheckBox x:Name="PedalCloseToggle" Content="Play a closed hi-hat on a fast pedal close" ToolTip="Closing always stops the open hi-hat. This adds a closed sound only above the chosen pedal velocity."/>

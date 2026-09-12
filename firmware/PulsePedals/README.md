@@ -11,6 +11,8 @@ Each pot's middle terminal (wiper) connects to its analog input; its outside ter
 
 ## Playing
 
+- **Swap kick / hi-hat inputs** changes to A1 kick / A0 hi-hat. Turn it off for A0 kick / A1 hi-hat. Calibration follows the physical inputs, and the choice stays local with calibration across preset loads. Keep the same Arduino sketch; no re-upload is needed.
+
 - Strike the main hi-hat pad: pedal pressed selects a closed V05 hi-hat, released selects open V05. The pair follows the kit of the selected hi-hat WAV. Without the sample library, distinct synthesized open/closed hats are used.
 - Closing the hi-hat fades the open voice over 5 ms, even with the close-hit toggle off.
 - **Play a closed hi-hat on a fast pedal close** optionally adds a closed hit. **Minimum close velocity** filters slow closures. Velocity is estimated from pot movement speed, not force.

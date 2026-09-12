@@ -394,6 +394,14 @@ namespace Pulse {
                 if (hits != beforePedals+2 || !hatClosed) throw new Exception("Disabled pedal-close toggle played a sound");
                 Get<Button>("KickDownButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 if (settings.KickDown != 900) throw new Exception("Pedal calibration button failed");
+                Get<CheckBox>("PedalSwapToggle").IsChecked=true;
+                if (!live.SwapPedalInputs || settings.HatDown != 900 || settings.KickDown != 1023) throw new Exception("Pedal swap lost calibration");
+                int beforeSwap=hits;
+                ReceivePedals(new PedalFrame {Time=40,Kick=0,Hat=0});
+                ReceivePedals(new PedalFrame {Time=50,Kick=0,Hat=900}); Tick();
+                if (hits != beforeSwap+1 || hatClosed || !Get<TextBlock>("KickPedalValue").Text.StartsWith("A1")) throw new Exception("Swapped A1 kick routing failed");
+                ReceivePedals(new PedalFrame {Time=60,Kick=900,Hat=900}); Tick();
+                if (hits != beforeSwap+1 || !hatClosed || !Get<TextBlock>("HatPedalValue").Text.StartsWith("A0")) throw new Exception("Swapped A0 hi-hat routing failed");
                 Get<TextBlock>("PedalCalibrationHint").BringIntoView(); Window.UpdateLayout(); Screenshot(System.IO.Path.Combine(folder,"pulse-pedals.png"));
                 File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"PASS: kit and classic views, themes, audio controls, learn/undo, preset restore, pedal toggles, kick-only routing, optional close hits, calibration and UI rendering. No hardware or user settings writes.");
             } catch (Exception e) { File.WriteAllText(System.IO.Path.Combine(folder,"ui-smoke.txt"),"FAIL: " + e); Environment.ExitCode = 1; }
