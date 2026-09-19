@@ -169,3 +169,12 @@ The local network is the access boundary: devices that can reach the HTTPS page 
 Select the hi-hat in Kit view or browser Edit. **MIDI note** is the closed hi-hat note and also the optional pedal-close hit note. **Open hi-hat MIDI note** sets the open articulation (default 46). Transpose applies to both, and closing the pedal stops the configured open note. Without a connected pedal, pad hits retain the normal hi-hat note.
 
 **Hi-hat pedal MIDI controller (CC)** in the Pedal Nano panel sets the position controller (default CC4). It follows the selected MIDI output and kit channel. These settings save automatically and are included in named presets. Existing presets gain the standard open-note/CC defaults without changing their existing closed hi-hat mapping.
+
+
+### Per-drum sample gain and threshold learning (2.5)
+
+**Sample gain** in pad settings adjusts that instrument's direct audio from −60 to +36 dB before reverb and master gain. It affects sample/synth playback and both hi-hat articulations, without changing MIDI velocity or notes. It follows the instrument when inputs are reassigned, survives output restarts, and saves in presets. Existing kits start at 0 dB per drum.
+
+Use **Learn thresholds · all** or **Learn selected pad** with the main Arduino connected and verified. Keep the kit still for the six-second quiet phase, then play six separate soft-to-firm hits on the named drum about one second apart. Each piece advances automatically. Review the suggested hit/reset thresholds and click **Apply learned thresholds**; Cancel preserves the prior values. The browser Settings menu includes the same actions and live instructions.
+
+Calibration temporarily requests hit=2/reset=1 on the main Nano and pauses performance triggering. It uses reported RAW peak events, groups vibration bursts as one strike, estimates idle noise and cross-pad peaks, and flags overlapping noise/hit ranges for review. It does not claim continuous ADC measurements or train an ML model. The existing sketch has no settings acknowledgement; unsupported firmware may ignore the temporary sensitivity. Missing/weak input waits indefinitely instead of inventing a result. Completion/cancel restores current device settings until suggestions are applied. Disconnect cancels and restores saved settings on reconnect; a normal app exit waits for restoration commands. A process crash/power loss during calibration requires reconnecting Pulse to restore settings. Calibration changes only hit/reset thresholds, not pad mapping, MIDI, velocity curves or sample gain.

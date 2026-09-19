@@ -92,7 +92,7 @@ namespace Pulse {
                 worker = new Thread(Pump) { IsBackground = true, Priority = ThreadPriority.AboveNormal, Name = "Pulse audio" }; worker.Start();
             } catch (Exception e) { Error = e.Message; Release(); }
         }
-        public void Hit(int pad, int velocity, int hatMode = 0) { lock (gate) { if (voices.Count >= 48) voices.RemoveAt(0); voices.Add(new Voice { Sample = pad == 0 && hatMode != 0 ? ((hatMode == 2 ? openHat : closedHat) ?? samples[pad]) : samples[pad], Part = pad, Gain = velocity / 127f, OpenHat=pad == 0 && hatMode == 2 }); } }
+        public void Hit(int pad, int velocity, int hatMode = 0, float sampleGain = 1) { lock (gate) { if (voices.Count >= 48) voices.RemoveAt(0); voices.Add(new Voice { Sample = pad == 0 && hatMode != 0 ? ((hatMode == 2 ? openHat : closedHat) ?? samples[pad]) : samples[pad], Part = pad, Gain = velocity / 127f * Math.Max(0,Math.Min(64,sampleGain)), OpenHat=pad == 0 && hatMode == 2 }); } }
         public void Panic() { lock (gate) { voices.Clear(); reverb.Clear(); limiterGain = 1; } }
         internal void MixBlock(short[] output, int length = -1) {
             if (length < 0) length = output.Length;

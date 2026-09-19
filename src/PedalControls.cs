@@ -93,7 +93,7 @@ namespace Pulse {
                 cfg=live;
                 f=PedalMotion.MapInputs(f,cfg.SwapPedalInputs);
                 kickRaw=f.Kick; hatRaw=f.Hat; result=pedalMotion.Accept(f,cfg); hatClosed=result.Closed;
-                if (learning || !cfg.PedalsEnabled) return;
+                if (learning || calibrating || !cfg.PedalsEnabled) return;
                 int cc=(int)Math.Round(PedalMotion.Position(f.Hat,cfg.HatRest,cfg.HatDown)*127);
                 if (cfg.MidiEnabled && (cc != lastPedalCc || cfg.HiHatController!=lastPedalController || cfg.Channel!=lastPedalChannel || cfg.MidiOutput!=lastPedalOutput)) { midi.Control(cfg.HiHatController,cc,cfg.Channel); lastPedalCc=cc; lastPedalController=cfg.HiHatController; lastPedalChannel=cfg.Channel; lastPedalOutput=cfg.MidiOutput; }
             }

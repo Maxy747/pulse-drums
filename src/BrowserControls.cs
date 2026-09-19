@@ -15,10 +15,11 @@ using System.Windows.Threading;
 namespace Pulse {
     public sealed partial class Controller {
         static readonly string[][] BrowserGroups={
-            new[]{"Pad", "SampleCombo","MuteToggle","ThresholdSlider","ResetSlider","GainSlider","FloorSlider","CeilingSlider","CurveSlider","GuardSlider","NoteCombo","OpenHatNoteCombo","AssignOneButton","TestPad","ResetPad","ResetTomsButton"},
+            new[]{"Pad", "SampleCombo","SampleGainSlider","MuteToggle","ThresholdSlider","ResetSlider","GainSlider","FloorSlider","CeilingSlider","CurveSlider","GuardSlider","NoteCombo","OpenHatNoteCombo","AssignOneButton","TestPad","ResetPad","ResetTomsButton"},
             new[]{"Output","AudioDeviceCombo","RouteCombo","VolumeSlider","OutputGainSlider","ReverbToggle","ReverbSlider","PlayerStereoToggle","StereoWidthSlider","AudioRetryButton","AsioPanelButton","PanicButton"},
             new[]{"MIDI","MidiCombo","ChannelCombo","TransposeCombo","LengthSlider"},
             new[]{"Trigger protection & setup","HighSensitivity","MediumSensitivity","LowSensitivity","DefaultsButton","CrosstalkSlider","SetupAllButton","SetupUndo","SetupCancel"},
+            new[]{"Threshold learning","CalibrateAllButton","CalibratePadButton","CalibrationApply","CalibrationCancel"},
             new[]{"Pedals","PedalsToggle","PedalPortCombo","HiHatControllerCombo","PedalSwapToggle","PedalKickOnlyToggle","MainKickOnlyToggle","PedalCloseToggle","PedalCloseSlider","KickRestButton","KickDownButton","HatRestButton","HatDownButton"},
             new[]{"Sounds & presets","KitPresetCombo","ApplyKitButton","LibraryFolderButton","BrowseSampleButton"},
             new[]{"App & devices","PortCombo","StartupToggle","UsbLaunchToggle","TrayToggle","GreenThemeButton","RedThemeButton","BlueThemeButton","KitViewButton","ClassicViewButton"}
@@ -43,7 +44,7 @@ namespace Pulse {
             if(args.TryGetValue("part",out partText) && (!Int32.TryParse(partText,out part) || part<0 || part>7)) throw new InvalidDataException("Invalid drum");
             if(action=="hit") {
                 int velocity; if(!args.ContainsKey("value") || !Int32.TryParse(args["value"],out velocity) || velocity<1 || velocity>127) throw new InvalidDataException("Invalid velocity");
-                if(!learning) Hit(part,velocity,true); return "{\"ok\":true}";
+                if(!learning && !calibrating) Hit(part,velocity,true); return "{\"ok\":true}";
             }
             if(action=="select") SelectPad(part);
             if(action=="set") {

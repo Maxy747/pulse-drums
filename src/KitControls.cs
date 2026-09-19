@@ -112,12 +112,13 @@ namespace Pulse {
             Changed(false);
         }
         void ReceiveInput(Frame f) {
+            if(calibrating) { if(f.Kind=="RAW")Enqueue(new Frame("CALIBRATE",f.Index,f.Value));return; }
             if (learning) { if (f.Kind == "RAW") Enqueue(new Frame("LEARN",f.Index,f.Value)); return; }
             int part = live.PartForInput(f.Index); if (part < 0) return;
             if (part == 5 && live.PedalOnlyKick) return;
             if (f.Kind == "HIT") { if (smoke) Hit(part,f.Value,false); else { triggerFilter.Push(f,live,clock.ElapsedMilliseconds); triggerFilter.Flush(live,clock.ElapsedMilliseconds,AcceptTrigger); } } else if (f.Kind == "RAW") Enqueue(new Frame("RAW",part,f.Value));
         }
-        void AcceptTrigger(Frame frame) { if (learning || exiting) return; int part = live.PartForInput(frame.Index); if (part >= 0 && !(part == 5 && live.PedalOnlyKick)) Hit(part,frame.Value,false); }
+        void AcceptTrigger(Frame frame) { if (learning || calibrating || exiting) return; int part = live.PartForInput(frame.Index); if (part >= 0 && !(part == 5 && live.PedalOnlyKick)) Hit(part,frame.Value,false); }
         void RestartAudio() {
             if (smoke || audio == null || exiting) return;
             var replacement = new AudioEngine(); replacement.Volume = (float)settings.Volume; replacement.OutputGain = (float)Math.Pow(10,settings.OutputGainDb/20); replacement.ReverbEnabled = settings.ReverbEnabled; replacement.ReverbAmount = (float)settings.ReverbAmount;
@@ -128,6 +129,7 @@ namespace Pulse {
             logs.Enqueue(replacement.Error == "" ? replacement.OutputStatus : replacement.Error);
         }
         void BeginLearn(bool all) {
+            if(calibrating)StopCalibration(false);
             triggerFilter.Clear();
             learnOriginal = (int[])settings.Inputs.Clone();
             learn = new LearnSession(settings.Inputs,selected,all,clock.ElapsedMilliseconds); learnPart = learn.Part; learning = true;
@@ -210,8 +212,9 @@ namespace Pulse {
             Get<ComboBox>("RouteCombo").SelectedIndex = 0;
         }
         void ApplyPreset(Settings preset) {
+            if(calibrating)StopCalibration(false);
             EndLearn(false); preset.Normalize();
-            settings.Pads = preset.Pads; settings.Inputs = preset.Inputs; settings.InstrumentNotes = preset.InstrumentNotes; settings.OpenHatNote=preset.OpenHatNote; settings.HiHatController=preset.HiHatController; settings.SampleFiles = preset.SampleFiles;
+            settings.Pads = preset.Pads; settings.Inputs = preset.Inputs; settings.InstrumentNotes = preset.InstrumentNotes; settings.OpenHatNote=preset.OpenHatNote; settings.HiHatController=preset.HiHatController; settings.SampleFiles = preset.SampleFiles; settings.SampleGainDb=(double[])preset.SampleGainDb.Clone();
             settings.Channel = preset.Channel; settings.Volume = preset.Volume; settings.Sound = preset.Sound; settings.MidiEnabled = preset.MidiEnabled;
             settings.ReverbEnabled = preset.ReverbEnabled; settings.ReverbAmount = preset.ReverbAmount;
             settings.OutputGainDb = preset.OutputGainDb;

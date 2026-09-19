@@ -20,6 +20,7 @@ namespace Pulse {
         readonly long[] sequence=new long[8],at=new long[8];
         readonly int[] velocity=new int[8];
         long total; int last=-1; bool preview;
+        string calibrationText="";
         string theme="Green",status="Waiting for drums";
         bool ready,pedals,closed,learning; double kick,hat,masterGain;
         public readonly string Session=Guid.NewGuid().ToString("N");
@@ -29,8 +30,8 @@ namespace Pulse {
             if (part < 0 || part > 7) return;
             lock (gate) { sequence[part]++; at[part]=clock.ElapsedMilliseconds; velocity[part]=Math.Max(0,Math.Min(127,value)); last=part; preview=audition; if (!audition) total++; }
         }
-        public void Update(string color,string connection,bool connected,bool pedalReady,bool hatClosed,double kickPosition,double hatPosition,bool setup,double gain=0) {
-            lock (gate) { theme=color; status=connection; ready=connected; pedals=pedalReady; closed=hatClosed; kick=kickPosition; hat=hatPosition; learning=setup; masterGain=gain; }
+        public void Update(string color,string connection,bool connected,bool pedalReady,bool hatClosed,double kickPosition,double hatPosition,bool setup,double gain=0,string calibration="") {
+            lock (gate) { theme=color; status=connection; ready=connected; pedals=pedalReady; closed=hatClosed; kick=kickPosition; hat=hatPosition; learning=setup; masterGain=gain;calibrationText=calibration; }
         }
         public static string Quote(string value) {
             var b=new StringBuilder("\"");
@@ -43,6 +44,7 @@ namespace Pulse {
                 b.Append("{\"session\":").Append(Quote(Session)).Append(",\"theme\":").Append(Quote(theme)).Append(",\"status\":").Append(Quote(status));
                 b.Append(",\"ready\":").Append(ready ? "true" : "false").Append(",\"pedals\":").Append(pedals ? "true" : "false").Append(",\"closed\":").Append(closed ? "true" : "false");
                 b.Append(",\"learning\":").Append(learning ? "true" : "false").Append(",\"kick\":").Append(kick.ToString("0.000",CultureInfo.InvariantCulture)).Append(",\"hat\":").Append(hat.ToString("0.000",CultureInfo.InvariantCulture));
+                b.Append(",\"calibration\":").Append(Quote(calibrationText));
                 b.Append(",\"gain\":").Append(masterGain.ToString("0.00",CultureInfo.InvariantCulture));
                 b.Append(",\"total\":").Append(total).Append(",\"last\":").Append(last).Append(",\"preview\":").Append(preview ? "true" : "false").Append(",\"pads\":[");
                 for (int i=0;i<8;i++) { if (i>0) b.Append(','); b.Append('[').Append(sequence[i]).Append(',').Append(velocity[i]).Append(',').Append(sequence[i] == 0 ? -1 : now-at[i]).Append(']'); }

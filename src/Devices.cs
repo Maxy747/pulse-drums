@@ -49,7 +49,9 @@ namespace Pulse {
                 for (int i = 0; i < 15 && !stop; i++) Thread.Sleep(100);
             }
         }
-        public void Configure(Settings settings, bool thresholdsChanged) { config = settings.Copy(); if (thresholdsChanged) settingsDirty = true; }
+        readonly ManualResetEvent thresholdsSent=new ManualResetEvent(true);
+        public void WaitForThresholdWrites() { thresholdsSent.WaitOne(1800); }
+        public void Configure(Settings settings, bool thresholdsChanged) { config = settings.Copy(); if (thresholdsChanged) { thresholdsSent.Reset(); settingsDirty = true; } }
         void SetStatus(string message, bool ready) { if (lastStatus == message) return; lastStatus = message; if (Status != null) Status(message, ready); }
         public static PortInfo[] Scan() {
             var result = new List<PortInfo>();
@@ -98,7 +100,7 @@ namespace Pulse {
                         // Pace complete lines to avoid overflowing the Nano's small receive buffer.
                         if (commands.Count > 0 && watch.ElapsedMilliseconds - lastCommand >= 25) {
                             port.Write(commands.Dequeue()); lastCommand = watch.ElapsedMilliseconds;
-                            if (commands.Count == 0 && Log != null) Log("Thresholds sent. This sketch does not acknowledge settings.");
+                            if (commands.Count == 0) { if(!settingsDirty)thresholdsSent.Set(); if(Log != null) Log("Thresholds sent. This sketch does not acknowledge settings."); }
                         }
                     }
                     if (!Verified && String.IsNullOrEmpty(cfg.Port) && ports.Count(p => p.Candidate) > 1 && watch.ElapsedMilliseconds - opened > 8000) { candidateIndex++; Disconnect(); }

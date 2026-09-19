@@ -12,6 +12,25 @@ namespace Pulse {
         [STAThread] public static int Main(string[] args) {
             try {
                 Frame f;
+                var calibrationSettings=new Settings();calibrationSettings.Normalize();
+                var calibrationTest=new ThresholdLearning(calibrationSettings,3,false,0);int sensor=calibrationSettings.Inputs[3];
+                for(int t=1000;t<5000;t+=100)calibrationTest.Feed(sensor,3,t);
+                calibrationTest.Tick(6500);Check(!calibrationTest.Complete && calibrationTest.Count==0,"Calibration waits for actual strikes after idle phase");
+                for(int strike=0;strike<6;strike++) { long time=7000+strike*1100;calibrationTest.Feed(sensor,100+strike*20,time);calibrationTest.Feed(sensor,80,time+30);calibrationTest.Tick(time+181);calibrationTest.Feed(sensor,90,time+200); }
+                Check(calibrationTest.Complete && calibrationTest.Count==6,"Peak bursts and cooldown echoes count as six distinct strikes");
+                Check(calibrationTest.Hit[sensor]>3 && calibrationTest.Hit[sensor]<100 && calibrationTest.Reset[sensor]<calibrationTest.Hit[sensor],"Learned thresholds reject idle noise and retain softer hits");
+                Check(calibrationTest.Hit[0]==calibrationSettings.Pads[0].Hit,"Single-pad calibration preserves other thresholds");
+                var allThresholds=new ThresholdLearning(calibrationSettings,0,true,0);long calTime=7000;
+                for(int part=0;part<8;part++)for(int hit=0;hit<6;hit++){int input=calibrationSettings.Inputs[part];allThresholds.Feed(input,150,calTime);allThresholds.Feed((input+1)%8,10,calTime+10);allThresholds.Tick(calTime+181);calTime+=1100;}
+                Check(allThresholds.Complete && allThresholds.Hit.All(v=>v>10 && v<150),"All-pad calibration advances automatically and uses cross-pad peaks");
+                Check(allThresholds.Hit.Select((v,i)=>allThresholds.Reset[i]<v).All(v=>v),"All learned reset thresholds remain below hit thresholds");
+                calibrationSettings.SampleGainDb[3]=12;var gainCopy=calibrationSettings.Copy();gainCopy.SampleGainDb[3]=0;Check(calibrationSettings.SampleGainDb[3]==12,"Sample gain snapshots are independent");
+                using(var sampleMixer=new AudioEngine()) {
+                    sampleMixer.Volume=1;sampleMixer.SetSample(3,Enumerable.Repeat(.01f,4096).ToArray());var block=new short[512];
+                    sampleMixer.Hit(3,127,0,1);sampleMixer.MixBlock(block);int original=block[100];sampleMixer.Panic();sampleMixer.Hit(3,127,0,2);sampleMixer.MixBlock(block);
+                    Check(Math.Abs(block[100]-original*2)<=1,"Individual sample gain scales audio independently of velocity");
+                    sampleMixer.Panic();sampleMixer.SetSample(5,Enumerable.Repeat(.01f,4096).ToArray());sampleMixer.Hit(5,127);sampleMixer.MixBlock(block);Check(block[100]==original,"One drum gain does not affect another drum");
+                }
                 var hatNotes=new Settings(); hatNotes.Normalize();
                 Check(hatNotes.OpenHatNote==46 && hatNotes.HiHatController==4,"Legacy settings get standard open hat and CC defaults");
                 hatNotes.InstrumentNotes[0]=55; hatNotes.OpenHatNote=59; hatNotes.Transpose=2;
@@ -178,7 +197,8 @@ namespace Pulse {
                     s.Pads[4].Note = 80; SettingsStore.Save(s,path); loaded = SettingsStore.Load(path,out warning);
                     Check(loaded.Pads[4].Note == 80 && File.Exists(path + ".bak"),"Atomic replacement with backup");
                     File.WriteAllText(path,"corrupt"); loaded = SettingsStore.Load(path,out warning); Check(warning != "" && loaded.Pads.Length == 8,"Corrupt settings recovery");
-                    var preset = new Settings(); preset.Normalize(); preset.Inputs = swapped; preset.SampleFiles[0] = "custom.wav"; preset.InstrumentNotes[0] = 44; preset.OpenHatNote=63; preset.HiHatController=11; SettingsStore.Save(preset,path); loaded = SettingsStore.Load(path,out warning);
+                    var preset = new Settings(); preset.Normalize(); preset.Inputs = swapped; preset.SampleFiles[0] = "custom.wav"; preset.InstrumentNotes[0] = 44; preset.SampleGainDb[2]=8.5; preset.OpenHatNote=63; preset.HiHatController=11; SettingsStore.Save(preset,path); loaded = SettingsStore.Load(path,out warning);
+                    Check(loaded.SampleGainDb[2]==8.5,"Sample gain persists in presets");
                     Check(loaded.OpenHatNote==63 && loaded.HiHatController==11,"Preset roundtrip includes open hi-hat and pedal CC");
                     Check(loaded.Inputs.SequenceEqual(swapped) && loaded.SampleFiles[0] == "custom.wav" && loaded.InstrumentNotes[0] == 44,"Preset roundtrip includes assignments, sounds and notes");
                     string wav = Path.Combine(folder,"stereo24.wav"); WriteWave(wav,48000,24,2,new byte[]{0,0,64,0,0,192,0,0,32,0,0,224}); var decoded = WaveFile.Load(wav);

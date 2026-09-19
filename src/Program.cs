@@ -91,7 +91,7 @@ namespace Pulse {
             using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Pulse.Main.xaml")) using (var reader = new StreamReader(stream)) Window = Theme.Load(reader.ReadToEnd(), settings.ThemeName);
             Window.Height = Math.Min(Window.Height,SystemParameters.WorkArea.Height - 24);
             Window.SourceInitialized += delegate { int dark = 1; try { DwmSetWindowAttribute(new WindowInteropHelper(Window).Handle, 20, ref dark, 4); } catch { } };
-            MakePads(); BindControls(); BuildKitControls(); BuildPedalControls(); SelectPad(0);
+            MakePads(); BindControls(); BuildKitControls(); BuildPedalControls(); BuildCalibrationControls(); SelectPad(0);
             liveView.Controls=BrowserControl;
             Get<Button>("TabletSetupButton").Click += delegate {
                 if(smoke) return;
@@ -164,6 +164,7 @@ namespace Pulse {
             }
         }
         void BindControls() {
+            Get<Slider>("SampleGainSlider").ValueChanged+=delegate { if(updating)return; settings.SampleGainDb[selected]=Get<Slider>("SampleGainSlider").Value; Get<TextBlock>("SampleGainValue").Text=settings.SampleGainDb[selected].ToString("+0.0;-0.0;0.0")+" dB"; Changed(false); };
             updating = true;
             Get<CheckBox>("SoundToggle").IsChecked = settings.Sound;
             Get<CheckBox>("TrayToggle").IsChecked = settings.MinimizeToTray;
@@ -204,6 +205,7 @@ namespace Pulse {
         }
         void SelectPad(int index) {
             selected = index; updating = true; var p = SelectedPad;
+            Get<Slider>("SampleGainSlider").Value=settings.SampleGainDb[index];Get<TextBlock>("SampleGainValue").Text=settings.SampleGainDb[index].ToString("+0.0;-0.0;0.0")+" dB";
             Get<TextBlock>("SelectedName").Text = Kit.Names[index]; Get<CheckBox>("MuteToggle").IsChecked = p.Muted;
             Get<Slider>("ThresholdSlider").Value = p.Hit; Get<Slider>("ResetSlider").Maximum = p.Hit - 1; Get<Slider>("ResetSlider").Value = p.Reset;
             Get<Slider>("GainSlider").Value = p.Gain; Get<Slider>("CurveSlider").Value = p.Curve; Get<Slider>("GuardSlider").Value = p.RetriggerMs;
@@ -235,10 +237,11 @@ namespace Pulse {
             Get<TextBlock>("VolumeValue").Text = Math.Round(settings.Volume * 100) + "%";
         }
         void Changed(bool thresholds) {
+            if(calibrating && thresholds)StopCalibration(false);
             settings.Normalize(); live = settings.Copy(); dirty = true; saveAt = clock.ElapsedMilliseconds + 450;
             if (audio != null) { audio.Volume = (float)settings.Volume; audio.OutputGain = (float)Math.Pow(10,settings.OutputGainDb/20); audio.ReverbEnabled = settings.ReverbEnabled; audio.ReverbAmount = (float)settings.ReverbAmount; }
             if (audio != null) audio.ConfigureStereo(settings.PlayerStereoEnabled,settings.PlayerStereoWidth);
-            if (connection != null) connection.Configure(settings, thresholds);
+            if (connection != null && !calibrating) connection.Configure(settings, thresholds);
             if (pedals != null) pedals.Configure(settings);
             Get<TextBlock>("SaveStatus").Text = "Saving settings…";
         }
@@ -284,12 +287,12 @@ namespace Pulse {
             Enqueue(new Frame(preview ? "PREVIEW" : "HIT",index,output));
             if (p.Muted || smoke) return;
             int hatMode = index == 0 && (pedalClose || (cfg.PedalsEnabled && pedalReady)) ? (pedalClose || hatClosed ? 1 : 2) : 0;
-            var activeAudio = audio; if (cfg.Sound && activeAudio != null) activeAudio.Hit(index,output,hatMode);
+            var activeAudio = audio; if (cfg.Sound && activeAudio != null) activeAudio.Hit(index,output,hatMode,(float)Math.Pow(10,cfg.SampleGainDb[index]/20));
             if (cfg.MidiEnabled) midi.Hit(cfg.MidiNoteForPart(index,hatMode==2),output,cfg.Channel,now,cfg.NoteOffMs);
         }
         void Tick() {
             TickPedals();
-            liveView.Update(settings.ThemeName,connectionText,ready,settings.PedalsEnabled && pedalReady,hatClosed,PedalMotion.Position(kickRaw,settings.KickRest,settings.KickDown),PedalMotion.Position(hatRaw,settings.HatRest,settings.HatDown),learning,settings.OutputGainDb);
+            liveView.Update(settings.ThemeName,connectionText,ready,settings.PedalsEnabled && pedalReady,hatClosed,PedalMotion.Position(kickRaw,settings.KickRest,settings.KickDown),PedalMotion.Position(hatRaw,settings.HatRest,settings.HatDown),learning || calibrating,settings.OutputGainDb,calibrating ? Get<TextBlock>("CalibrationTitle").Text+" · "+Get<TextBlock>("CalibrationHint").Text : "");
             if (timer != null) timer.Interval = TimeSpan.FromMilliseconds(Window.IsVisible ? 25 : 250);
             Get<TextBlock>("StatusText").Text = connectionText;
             Get<System.Windows.Shapes.Ellipse>("StatusDot").Fill = Brush(ready ? "#C5F36B" : "#B7A26B");
@@ -320,11 +323,12 @@ namespace Pulse {
             }
             Frame f; int count = 0;
             while (count++ < 128 && frames.TryDequeue(out f)) {
+                if(f.Kind=="CALIBRATE") { if(calibrating && calibration!=null)calibration.Feed(f.Index,f.Value,clock.ElapsedMilliseconds); continue; }
                 if (f.Kind == "LEARN") { CaptureLearn(f.Index,f.Value); continue; }
                 if (f.Kind == "RAW") { rawLabels[f.Index].Text = "PEAK  " + f.Value; }
                 else { meters[f.Index] = Math.Max(.7, f.Value / 127.0); if (f.Kind == "HIT") { hits++; Get<TextBlock>("HitCount").Text = hits.ToString("N0"); } Get<TextBlock>("LastHit").Text = (f.Kind == "PREVIEW" ? "Audition · " : "Last hit · ") + Kit.Names[f.Index] + " · velocity " + f.Value + (settings.Pads[settings.Inputs[f.Index]].Muted ? " · muted" : ""); }
             }
-            UpdateLearn();
+            UpdateLearn(); UpdateCalibration();
             if (kitView != null) kitView.Update(meters,selected,learning ? learnPart : -1);
             for (int i = 0; i < 8; i++) { meterFills[i].Width = Math.Max(0, padCards[i].ActualWidth - 30) * meters[i]; meters[i] *= .91; }
             string line; while (logs.TryDequeue(out line)) {
@@ -350,6 +354,7 @@ namespace Pulse {
         }
         void Show() { Window.Show(); Window.WindowState = WindowState.Normal; Window.Activate(); }
         void Shutdown() {
+            if(calibrating) { StopCalibration(false); if(connection!=null)connection.WaitForThresholdWrites(); }
             exiting = true;
             if (timer != null) timer.Stop(); if (dirty) Save();
             previewStopped=true;
@@ -372,7 +377,9 @@ namespace Pulse {
             string folder = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"..","artifacts")); Directory.CreateDirectory(folder);
             try {
                 connectionText = "Preview · no hardware connection"; Tick(); Window.UpdateLayout(); Screenshot(System.IO.Path.Combine(folder,"pulse-preview.png"));
-                SelectPad(0); BrowserControlUi("action=set&id=OpenHatNoteCombo&part=0&value=61");
+                SelectPad(0); BrowserControlUi("action=set&id=SampleGainSlider&part=0&value=8.5"); if(live.SampleGainDb[0]!=8.5)throw new Exception("Browser sample gain failed");
+                StartCalibration(false); Screenshot(System.IO.Path.Combine(folder,"pulse-threshold-learning.png")); StopCalibration(false); if(calibrating)throw new Exception("Calibration cancel failed");
+                BrowserControlUi("action=set&id=OpenHatNoteCombo&part=0&value=61");
                 BrowserControlUi("action=set&id=HiHatControllerCombo&value=11");
                 if(live.OpenHatNote!=61 || live.HiHatController!=11 || Get<FrameworkElement>("OpenHatNotePanel").Visibility!=Visibility.Visible) throw new Exception("Hi-hat MIDI controls failed");
                 Screenshot(System.IO.Path.Combine(folder,"pulse-hihat-midi.png"));

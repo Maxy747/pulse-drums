@@ -1,3 +1,11 @@
+Pulse 2.5.0 — per-drum audio gain and guided threshold learning.
+
+- Added −60 to +36 dB sample gain for each logical instrument, independent of MIDI velocity, saved in settings/presets and exposed in browser Edit.
+- Added selected-pad/all-pad calibration: quiet phase, six distinct strikes per part, automatic progression, suggested hit/reset thresholds, review/apply/cancel and live browser instructions.
+- Calibration requests temporary low thresholds without saving them, suppresses performance triggers, and restores current settings after completion/cancel/disconnect. Normal exit waits for restoration writes.
+- Uses reported peak events rather than continuous ADC data or ML. Firmware does not acknowledge threshold writes; real-kit calibration remains user-driven.
+- Validated audio scaling/isolation, persistence, distinct-strike grouping, all-pad progression, threshold invariants and WPF/browser controls.
+
 Pulse 2.4.1 — configurable hi-hat MIDI articulation.
 
 - Open hi-hat has its own MIDI note selector in desktop and browser pad settings.

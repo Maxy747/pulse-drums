@@ -49,6 +49,7 @@ namespace Pulse {
         public int[] InstrumentNotes { get; set; }
         public int OpenHatNote { get; set; }
         public int HiHatController { get; set; }
+        public double[] SampleGainDb { get; set; }
         public string[] SampleFiles { get; set; }
         public bool ClassicView { get; set; }
         public string ThemeName { get; set; }
@@ -68,7 +69,7 @@ namespace Pulse {
             Pads = Enumerable.Range(0,8).Select(i => new Pad { Note = Protocol.Notes[i], Hit = Kit.TriggerDefaults[i], Reset = Kit.ResetDefaults[i], Gain = 1, Curve = .6, VelocityFloor = 50, RetriggerMs = 0 }).ToArray();
             Volume = .7; Sound = true; MinimizeToTray = true; Port = ""; DeviceId = ""; MidiOutput = ""; Channel = 1; MidiEnabled = true; NoteOffMs = 10;
         }
-        public Settings Copy() { var s = (Settings)MemberwiseClone(); s.Pads = Pads.Select(p => p.Copy()).ToArray(); s.Inputs = Inputs == null ? null : (int[])Inputs.Clone(); s.InstrumentNotes = InstrumentNotes == null ? null : (int[])InstrumentNotes.Clone(); s.SampleFiles = SampleFiles == null ? null : (string[])SampleFiles.Clone(); return s; }
+        public Settings Copy() { var s = (Settings)MemberwiseClone(); s.Pads = Pads.Select(p => p.Copy()).ToArray(); s.Inputs = Inputs == null ? null : (int[])Inputs.Clone(); s.InstrumentNotes = InstrumentNotes == null ? null : (int[])InstrumentNotes.Clone(); s.SampleGainDb=SampleGainDb==null?null:(double[])SampleGainDb.Clone(); s.SampleFiles = SampleFiles == null ? null : (string[])SampleFiles.Clone(); return s; }
         public void Normalize() {
             OpenHatNote=Math.Max(0,Math.Min(127,OpenHatNote)); HiHatController=Math.Max(0,Math.Min(127,HiHatController));
             if (MainDrumsOnlyKick) PedalOnlyKick=false;
@@ -95,6 +96,8 @@ namespace Pulse {
             if (Inputs == null || Inputs.Length != 8 || Inputs.Distinct().Count() != 8 || Inputs.Any(i => i < 0 || i > 7)) Inputs = (int[])Kit.DefaultInputs.Clone();
             if (InstrumentNotes == null || InstrumentNotes.Length != 8) InstrumentNotes = Inputs.Select(i => Pads[i].Note).ToArray();
             for (int i = 0; i < 8; i++) InstrumentNotes[i] = Math.Max(0, Math.Min(127, InstrumentNotes[i]));
+            if(SampleGainDb==null || SampleGainDb.Length!=8)SampleGainDb=new double[8];
+            for(int i=0;i<8;i++)SampleGainDb[i]=Clamp(SampleGainDb[i],-60,36);
             if (SampleFiles == null || SampleFiles.Length != 8) SampleFiles = new string[8];
             for (int i = 0; i < 8; i++) SampleFiles[i] = SampleFiles[i] ?? "";
             SampleFolder = SampleFolder ?? Path.Combine(SettingsStore.Folder, "Samples", "GSCW");
