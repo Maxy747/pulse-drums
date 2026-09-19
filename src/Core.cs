@@ -47,6 +47,8 @@ namespace Pulse {
         public int Channel { get; set; }
         public int[] Inputs { get; set; }
         public int[] InstrumentNotes { get; set; }
+        public int OpenHatNote { get; set; }
+        public int HiHatController { get; set; }
         public string[] SampleFiles { get; set; }
         public bool ClassicView { get; set; }
         public string ThemeName { get; set; }
@@ -59,6 +61,7 @@ namespace Pulse {
         public int Transpose { get; set; }
         public int NoteOffMs { get; set; }
         public Settings() {
+            OpenHatNote=46; HiHatController=4;
             PedalPort = ""; PedalDeviceId = ""; KickDown = HatDown = 1023; PedalCloseVelocity = 50;
             PlayerStereoEnabled = true; PlayerStereoWidth = 1;
             ReverbAmount = .25;
@@ -67,6 +70,7 @@ namespace Pulse {
         }
         public Settings Copy() { var s = (Settings)MemberwiseClone(); s.Pads = Pads.Select(p => p.Copy()).ToArray(); s.Inputs = Inputs == null ? null : (int[])Inputs.Clone(); s.InstrumentNotes = InstrumentNotes == null ? null : (int[])InstrumentNotes.Clone(); s.SampleFiles = SampleFiles == null ? null : (string[])SampleFiles.Clone(); return s; }
         public void Normalize() {
+            OpenHatNote=Math.Max(0,Math.Min(127,OpenHatNote)); HiHatController=Math.Max(0,Math.Min(127,HiHatController));
             if (MainDrumsOnlyKick) PedalOnlyKick=false;
             PedalPort = PedalPort ?? ""; PedalDeviceId = PedalDeviceId ?? "";
             PedalCloseVelocity = Math.Max(1,Math.Min(127,PedalCloseVelocity));
@@ -97,6 +101,7 @@ namespace Pulse {
             Transpose = Math.Max(-48,Math.Min(48,Transpose)); NoteOffMs = Math.Max(1,Math.Min(500,NoteOffMs));
         }
         public int PartForInput(int input) { return Array.IndexOf(Inputs, input); }
+        public int MidiNoteForPart(int part,bool openHat) { return Math.Max(0,Math.Min(127,(part==0 && openHat ? OpenHatNote : InstrumentNotes[part])+Transpose)); }
         public void SetPedalSwap(bool swap) {
             if (SwapPedalInputs == swap) return;
             int rest=KickRest,down=KickDown;

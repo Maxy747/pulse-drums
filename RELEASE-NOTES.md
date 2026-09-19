@@ -1,3 +1,11 @@
+Pulse 2.4.1 — configurable hi-hat MIDI articulation.
+
+- Open hi-hat has its own MIDI note selector in desktop and browser pad settings.
+- Closed pad hits and optional pedal-close hits follow the hi-hat pad's configured MIDI note instead of a fixed note 42. Open hits and pedal choke follow the configured open note, including transpose.
+- Pedal position uses a configurable CC (default 4) on the selected MIDI output and kit channel.
+- Settings persist in app settings and presets. Existing files retain standard open note 46 / CC4 defaults.
+- Validated 580 assertions and desktop/browser control smoke checks. No external DAW capture was performed.
+
 Pulse 2.4.0 — iPad live kit, touch control and master gain.
 
 - Added a local live kit website with hit feedback, themes, focus, labels and tablet layouts.

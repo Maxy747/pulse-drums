@@ -13,10 +13,13 @@ namespace Pulse {
         volatile string pedalStatus = "Pedals disabled", pedalIdentified;
         volatile int kickRaw,hatRaw;
         int lastPedalCc = -1, hatLoadVersion;
+        int lastPedalController=-1,lastPedalChannel=-1; string lastPedalOutput="";
         bool pedalUpdating;
         string pedalPortSignature = "";
         void BuildPedalControls() {
+            Get<ComboBox>("HiHatControllerCombo").ItemsSource=Enumerable.Range(0,128).ToArray();
             RefreshPedalControls();
+            Get<ComboBox>("HiHatControllerCombo").SelectionChanged+=delegate { if(pedalUpdating)return; settings.HiHatController=(int)Get<ComboBox>("HiHatControllerCombo").SelectedItem; Changed(false); };
             RoutedEventHandler swapInputs = delegate {
                 if (pedalUpdating) return;
                 lock (pedalGate) {
@@ -64,6 +67,7 @@ namespace Pulse {
         }
         void RefreshPedalControls() {
             pedalUpdating=true;
+            Get<ComboBox>("HiHatControllerCombo").SelectedItem=settings.HiHatController;
             Get<CheckBox>("PedalsToggle").IsChecked=settings.PedalsEnabled;
             Get<CheckBox>("PedalSwapToggle").IsChecked=settings.SwapPedalInputs;
             Get<CheckBox>("PedalCloseToggle").IsChecked=settings.PedalCloseHit;
@@ -91,11 +95,11 @@ namespace Pulse {
                 kickRaw=f.Kick; hatRaw=f.Hat; result=pedalMotion.Accept(f,cfg); hatClosed=result.Closed;
                 if (learning || !cfg.PedalsEnabled) return;
                 int cc=(int)Math.Round(PedalMotion.Position(f.Hat,cfg.HatRest,cfg.HatDown)*127);
-                if (cfg.MidiEnabled && cc != lastPedalCc) { midi.Control(4,cc,cfg.Channel); lastPedalCc=cc; }
+                if (cfg.MidiEnabled && (cc != lastPedalCc || cfg.HiHatController!=lastPedalController || cfg.Channel!=lastPedalChannel || cfg.MidiOutput!=lastPedalOutput)) { midi.Control(cfg.HiHatController,cc,cfg.Channel); lastPedalCc=cc; lastPedalController=cfg.HiHatController; lastPedalChannel=cfg.Channel; lastPedalOutput=cfg.MidiOutput; }
             }
             if (result.JustClosed) {
                 var a=audio; if (a != null) a.ChokeHat();
-                if (cfg.MidiEnabled) midi.StopNote(Math.Max(0,Math.Min(127,46+cfg.Transpose)),cfg.Channel);
+                if (cfg.MidiEnabled) midi.StopNote(cfg.MidiNoteForPart(0,true),cfg.Channel);
                 if (cfg.PedalCloseHit && result.CloseVelocity >= cfg.PedalCloseVelocity) Hit(0,result.CloseVelocity,false,true);
             }
             if (result.KickVelocity > 0 && !cfg.MainDrumsOnlyKick) Hit(5,result.KickVelocity,false);

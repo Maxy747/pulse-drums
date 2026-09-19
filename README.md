@@ -162,3 +162,10 @@ The private keys stay in the Windows current-user certificate store. Only the pu
 **Touch play** enables multi-touch drum auditions through the PC's selected audio output. **Edit** lets you tap a part to choose its sample and edit its tuning. **Settings** exposes audio/ASIO, MIDI, pedals and calibration, sensitivity, setup/undo, startup, sounds, and named presets. Native ASIO panels and file/folder pickers open on the PC. Master gain is available directly beside the toolbar and in settings. Settings save on the PC. Network touch adds Wi-Fi latency and does not stream audio to Safari.
 
 The local network is the access boundary: devices that can reach the HTTPS page can use its controls. Commands require an exact matching Origin and a per-run request token; the server does not allow cross-origin access. Use on a trusted home network. Live hit publication never performs network I/O on the audio thread. Safari automatically reconnects after returning from the background. No cloud service or account is required.
+
+
+### Hi-hat MIDI mapping (2.4.1)
+
+Select the hi-hat in Kit view or browser Edit. **MIDI note** is the closed hi-hat note and also the optional pedal-close hit note. **Open hi-hat MIDI note** sets the open articulation (default 46). Transpose applies to both, and closing the pedal stops the configured open note. Without a connected pedal, pad hits retain the normal hi-hat note.
+
+**Hi-hat pedal MIDI controller (CC)** in the Pedal Nano panel sets the position controller (default CC4). It follows the selected MIDI output and kit channel. These settings save automatically and are included in named presets. Existing presets gain the standard open-note/CC defaults without changing their existing closed hi-hat mapping.

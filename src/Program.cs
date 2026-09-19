@@ -169,6 +169,9 @@ namespace Pulse {
             Get<CheckBox>("TrayToggle").IsChecked = settings.MinimizeToTray;
             Get<Slider>("VolumeSlider").Value = settings.Volume * 100;
             Get<ComboBox>("NoteCombo").ItemsSource = Enumerable.Range(0,128).ToArray();
+            Get<ComboBox>("OpenHatNoteCombo").ItemsSource=Enumerable.Range(0,128).ToArray();
+            Get<ComboBox>("OpenHatNoteCombo").SelectedItem=settings.OpenHatNote;
+            Get<ComboBox>("OpenHatNoteCombo").SelectionChanged+=delegate { if(updating)return; midi.Panic(); settings.OpenHatNote=(int)Get<ComboBox>("OpenHatNoteCombo").SelectedItem; Changed(false); };
             Get<ComboBox>("ChannelCombo").ItemsSource = Enumerable.Range(1,16).ToArray(); Get<ComboBox>("ChannelCombo").SelectedItem = settings.Channel;
             Get<ComboBox>("MidiCombo").Items.Add("Off — built-in sounds only"); Get<ComboBox>("MidiCombo").SelectedIndex = 0;
             Get<ComboBox>("PortCombo").Items.Add(new PortInfo { Name = "", Label = "Auto-detect Arduino", Id = "" }); Get<ComboBox>("PortCombo").SelectedIndex = 0;
@@ -181,7 +184,7 @@ namespace Pulse {
             Get<CheckBox>("SoundToggle").Click += delegate { settings.Sound = Get<CheckBox>("SoundToggle").IsChecked == true; if (!settings.Sound && audio != null) audio.Panic(); Changed(false); };
             Get<CheckBox>("TrayToggle").Click += delegate { settings.MinimizeToTray = Get<CheckBox>("TrayToggle").IsChecked == true; Changed(false); };
             Get<CheckBox>("MuteToggle").Click += delegate { SelectedPad.Muted = Get<CheckBox>("MuteToggle").IsChecked == true; if (SelectedPad.Muted) { midi.Panic(); if (audio != null) audio.Panic(); } Changed(false); SelectPad(selected); };
-            Get<ComboBox>("NoteCombo").SelectionChanged += delegate { if (updating) return; settings.InstrumentNotes[selected] = (int)Get<ComboBox>("NoteCombo").SelectedItem; Changed(false); RefreshValues(); };
+            Get<ComboBox>("NoteCombo").SelectionChanged += delegate { if (updating) return; midi.Panic(); settings.InstrumentNotes[selected] = (int)Get<ComboBox>("NoteCombo").SelectedItem; Changed(false); RefreshValues(); };
             Get<ComboBox>("ChannelCombo").SelectionChanged += delegate { if (updating) return; settings.Channel = (int)Get<ComboBox>("ChannelCombo").SelectedItem; midi.Panic(); Changed(false); };
             Get<ComboBox>("PortCombo").SelectionChanged += delegate { if (updating) return; var p = Get<ComboBox>("PortCombo").SelectedItem as PortInfo; if (p == null) return; settings.Port = p.Name; Changed(false); };
             Get<ComboBox>("MidiCombo").SelectionChanged += delegate { if (updating) return; var cb = Get<ComboBox>("MidiCombo"); settings.MidiOutput = cb.SelectedIndex <= 0 ? "" : Convert.ToString(cb.SelectedItem); midi.Panic(); lastMidiScan = -10000; Changed(false); };
@@ -195,7 +198,7 @@ namespace Pulse {
                 } catch (Exception e) { Get<CheckBox>("StartupToggle").IsChecked = false; logs.Enqueue("Could not change startup: " + e.Message); }
             };
             Get<Button>("TestPad").Click += delegate { Hit(selected,100,true); };
-            Get<Button>("ResetPad").Click += delegate { settings.Pads[settings.Inputs[selected]] = new Settings().Pads[settings.Inputs[selected]]; settings.InstrumentNotes[selected] = Kit.Notes[selected]; Changed(true); SelectPad(selected); };
+            Get<Button>("ResetPad").Click += delegate { settings.Pads[settings.Inputs[selected]] = new Settings().Pads[settings.Inputs[selected]]; settings.InstrumentNotes[selected] = Kit.Notes[selected]; if(selected==0)settings.OpenHatNote=46; midi.Panic(); Changed(true); SelectPad(selected); };
             Get<Button>("PanicButton").Click += delegate { midi.Panic(); if (audio != null) audio.Panic(); Get<TextBlock>("LastHit").Text = "Active sounds stopped."; };
             Get<Button>("LogButton").Click += delegate { var panel = Get<Border>("LogPanel"); panel.Visibility = panel.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible; };
         }
@@ -207,6 +210,8 @@ namespace Pulse {
             Get<Slider>("FloorSlider").Maximum = p.VelocityCeiling; Get<Slider>("FloorSlider").Value = p.VelocityFloor;
             Get<Slider>("CeilingSlider").Value = p.VelocityCeiling;
             Get<ComboBox>("NoteCombo").SelectedItem = settings.InstrumentNotes[index];
+            Get<FrameworkElement>("OpenHatNotePanel").Visibility=index==0 ? Visibility.Visible : Visibility.Collapsed;
+            Get<ComboBox>("OpenHatNoteCombo").SelectedItem=settings.OpenHatNote;
             for (int i = 0; i < 8; i++) { padCards[i].BorderBrush = Brush(i == index ? "#C5F36B" : "#30372B"); padCards[i].Background = Brush(i == index ? "#28321F" : "#1B1F19"); padCards[i].Opacity = settings.Pads[settings.Inputs[i]].Muted ? .5 : 1; padNotes[i].Text = "A" + settings.Inputs[i] + " · NOTE " + settings.InstrumentNotes[i]; }
             updating = false; RefreshValues(); RefreshSampleChoices(); if (kitView != null) kitView.Update(meters,selected,learning ? learnPart : -1);
         }
@@ -280,7 +285,7 @@ namespace Pulse {
             if (p.Muted || smoke) return;
             int hatMode = index == 0 && (pedalClose || (cfg.PedalsEnabled && pedalReady)) ? (pedalClose || hatClosed ? 1 : 2) : 0;
             var activeAudio = audio; if (cfg.Sound && activeAudio != null) activeAudio.Hit(index,output,hatMode);
-            if (cfg.MidiEnabled) midi.Hit(Math.Max(0,Math.Min(127,(hatMode == 0 ? cfg.InstrumentNotes[index] : hatMode == 1 ? 42 : 46) + cfg.Transpose)),output,cfg.Channel,now,cfg.NoteOffMs);
+            if (cfg.MidiEnabled) midi.Hit(cfg.MidiNoteForPart(index,hatMode==2),output,cfg.Channel,now,cfg.NoteOffMs);
         }
         void Tick() {
             TickPedals();
@@ -367,6 +372,11 @@ namespace Pulse {
             string folder = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"..","artifacts")); Directory.CreateDirectory(folder);
             try {
                 connectionText = "Preview · no hardware connection"; Tick(); Window.UpdateLayout(); Screenshot(System.IO.Path.Combine(folder,"pulse-preview.png"));
+                SelectPad(0); BrowserControlUi("action=set&id=OpenHatNoteCombo&part=0&value=61");
+                BrowserControlUi("action=set&id=HiHatControllerCombo&value=11");
+                if(live.OpenHatNote!=61 || live.HiHatController!=11 || Get<FrameworkElement>("OpenHatNotePanel").Visibility!=Visibility.Visible) throw new Exception("Hi-hat MIDI controls failed");
+                Screenshot(System.IO.Path.Combine(folder,"pulse-hihat-midi.png"));
+                BrowserControlUi("action=set&id=OpenHatNoteCombo&part=0&value=46"); BrowserControlUi("action=set&id=HiHatControllerCombo&value=4");
                 SelectPad(3); Get<Slider>("ThresholdSlider").Value = 70; Get<Slider>("ResetSlider").Value = 32; Get<Slider>("GainSlider").Value = 1.35;
                 if (SelectedPad.Hit != 70 || SelectedPad.Reset != 32 || Math.Abs(SelectedPad.Gain - 1.35) > .01) throw new Exception("Pad sliders did not update settings");
                 Get<Slider>("ThresholdSlider").Value = 20; if (SelectedPad.Reset >= 20) throw new Exception("Reset threshold invariant broken");

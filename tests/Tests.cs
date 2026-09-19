@@ -12,6 +12,13 @@ namespace Pulse {
         [STAThread] public static int Main(string[] args) {
             try {
                 Frame f;
+                var hatNotes=new Settings(); hatNotes.Normalize();
+                Check(hatNotes.OpenHatNote==46 && hatNotes.HiHatController==4,"Legacy settings get standard open hat and CC defaults");
+                hatNotes.InstrumentNotes[0]=55; hatNotes.OpenHatNote=59; hatNotes.Transpose=2;
+                Check(hatNotes.MidiNoteForPart(0,false)==57,"Closed pad and pedal hits use configured hi-hat note");
+                Check(hatNotes.MidiNoteForPart(0,true)==61,"Open hat and choke use configured note plus transpose");
+                Check(hatNotes.MidiNoteForPart(5,true)==38,"Hi-hat articulation does not alter kick mapping");
+                hatNotes.OpenHatNote=126; hatNotes.Transpose=48; Check(hatNotes.MidiNoteForPart(0,true)==127,"Open hi-hat MIDI output clamps after transpose");
                 var browserState=new LiveViewState(); browserState.Hit(3,112,false); browserState.Hit(5,80,true);
                 Check(browserState.Json().Contains("\"total\":1") && browserState.Json().Contains("\"preview\":true"),"Browser counts accepted hits but not app auditions");
                 Check(LiveViewState.Quote("a\n\"b\\") == "\"a\\u000a\\\"b\\\\\"","Browser JSON escapes status strings");
@@ -171,7 +178,8 @@ namespace Pulse {
                     s.Pads[4].Note = 80; SettingsStore.Save(s,path); loaded = SettingsStore.Load(path,out warning);
                     Check(loaded.Pads[4].Note == 80 && File.Exists(path + ".bak"),"Atomic replacement with backup");
                     File.WriteAllText(path,"corrupt"); loaded = SettingsStore.Load(path,out warning); Check(warning != "" && loaded.Pads.Length == 8,"Corrupt settings recovery");
-                    var preset = new Settings(); preset.Normalize(); preset.Inputs = swapped; preset.SampleFiles[0] = "custom.wav"; preset.InstrumentNotes[0] = 44; SettingsStore.Save(preset,path); loaded = SettingsStore.Load(path,out warning);
+                    var preset = new Settings(); preset.Normalize(); preset.Inputs = swapped; preset.SampleFiles[0] = "custom.wav"; preset.InstrumentNotes[0] = 44; preset.OpenHatNote=63; preset.HiHatController=11; SettingsStore.Save(preset,path); loaded = SettingsStore.Load(path,out warning);
+                    Check(loaded.OpenHatNote==63 && loaded.HiHatController==11,"Preset roundtrip includes open hi-hat and pedal CC");
                     Check(loaded.Inputs.SequenceEqual(swapped) && loaded.SampleFiles[0] == "custom.wav" && loaded.InstrumentNotes[0] == 44,"Preset roundtrip includes assignments, sounds and notes");
                     string wav = Path.Combine(folder,"stereo24.wav"); WriteWave(wav,48000,24,2,new byte[]{0,0,64,0,0,192,0,0,32,0,0,224}); var decoded = WaveFile.Load(wav);
                     Check(decoded.Length == 4 && decoded[0] == .5f && decoded[1] == -.5f && decoded[2] == .25f,"24-bit stereo sign extension and channel preservation");

@@ -15,11 +15,11 @@ using System.Windows.Threading;
 namespace Pulse {
     public sealed partial class Controller {
         static readonly string[][] BrowserGroups={
-            new[]{"Pad", "SampleCombo","MuteToggle","ThresholdSlider","ResetSlider","GainSlider","FloorSlider","CeilingSlider","CurveSlider","GuardSlider","NoteCombo","AssignOneButton","TestPad","ResetPad","ResetTomsButton"},
+            new[]{"Pad", "SampleCombo","MuteToggle","ThresholdSlider","ResetSlider","GainSlider","FloorSlider","CeilingSlider","CurveSlider","GuardSlider","NoteCombo","OpenHatNoteCombo","AssignOneButton","TestPad","ResetPad","ResetTomsButton"},
             new[]{"Output","AudioDeviceCombo","RouteCombo","VolumeSlider","OutputGainSlider","ReverbToggle","ReverbSlider","PlayerStereoToggle","StereoWidthSlider","AudioRetryButton","AsioPanelButton","PanicButton"},
             new[]{"MIDI","MidiCombo","ChannelCombo","TransposeCombo","LengthSlider"},
             new[]{"Trigger protection & setup","HighSensitivity","MediumSensitivity","LowSensitivity","DefaultsButton","CrosstalkSlider","SetupAllButton","SetupUndo","SetupCancel"},
-            new[]{"Pedals","PedalsToggle","PedalPortCombo","PedalSwapToggle","PedalKickOnlyToggle","MainKickOnlyToggle","PedalCloseToggle","PedalCloseSlider","KickRestButton","KickDownButton","HatRestButton","HatDownButton"},
+            new[]{"Pedals","PedalsToggle","PedalPortCombo","HiHatControllerCombo","PedalSwapToggle","PedalKickOnlyToggle","MainKickOnlyToggle","PedalCloseToggle","PedalCloseSlider","KickRestButton","KickDownButton","HatRestButton","HatDownButton"},
             new[]{"Sounds & presets","KitPresetCombo","ApplyKitButton","LibraryFolderButton","BrowseSampleButton"},
             new[]{"App & devices","PortCombo","StartupToggle","UsbLaunchToggle","TrayToggle","GreenThemeButton","RedThemeButton","BlueThemeButton","KitViewButton","ClassicViewButton"}
         };
@@ -73,6 +73,7 @@ namespace Pulse {
             foreach(var group in BrowserGroups) {
                 var controls=new List<object>();
                 foreach(string id in group.Skip(1)) {
+                    if(id=="OpenHatNoteCombo" && selected!=0)continue;
                     var c=Get<Control>(id); if(c==null)continue;
                     var data=new Dictionary<string,object>{{"id",id},{"label",Label(c)},{"enabled",c.IsEnabled},{"hint",c.ToolTip as string ?? ""}};
                     var s=c as Slider; var cb=c as ComboBox; var ch=c as CheckBox;

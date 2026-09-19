@@ -95,7 +95,7 @@ namespace Pulse {
                 var dialog = new OpenFileDialog { Title = "Load a Pulse preset", Filter = "Pulse preset|*.pulse.xml;*.xml", InitialDirectory = Path.Combine(SettingsStore.Folder,"Presets") };
                 if (dialog.ShowDialog(Window) == true) try { string warning; var loaded = SettingsStore.Load(dialog.FileName,out warning); if (warning != "") throw new InvalidDataException(warning); ApplyPreset(loaded); } catch (Exception e) { Report("Could not load preset",e.Message); }
             };
-            Get<Button>("DefaultsButton").Click += delegate { EndLearn(false); settings.Pads = new Settings().Pads; settings.InstrumentNotes = (int[])Kit.Notes.Clone(); settings.Channel = 1; settings.Transpose = 0; settings.NoteOffMs = 10; settings.CrosstalkPercent = 0; settings.ProtectionDefaultsApplied = true; triggerFilter.Clear(); Get<Slider>("CrosstalkSlider").Value = 0; Changed(true); SelectPad(selected); Get<ComboBox>("ChannelCombo").SelectedItem = 1; Get<ComboBox>("TransposeCombo").SelectedItem = 0; Get<Slider>("LengthSlider").Value = 10; Get<TextBlock>("LastHit").Text = "Your calibrated trigger and velocity defaults restored. Input assignments and sounds kept."; };
+            Get<Button>("DefaultsButton").Click += delegate { EndLearn(false); settings.Pads = new Settings().Pads; settings.InstrumentNotes = (int[])Kit.Notes.Clone(); settings.OpenHatNote=46; settings.HiHatController=4; RefreshPedalControls(); settings.Channel = 1; settings.Transpose = 0; settings.NoteOffMs = 10; settings.CrosstalkPercent = 0; settings.ProtectionDefaultsApplied = true; triggerFilter.Clear(); Get<Slider>("CrosstalkSlider").Value = 0; Changed(true); SelectPad(selected); Get<ComboBox>("ChannelCombo").SelectedItem = 1; Get<ComboBox>("TransposeCombo").SelectedItem = 0; Get<Slider>("LengthSlider").Value = 10; Get<TextBlock>("LastHit").Text = "Your calibrated trigger and velocity defaults restored. Input assignments and sounds kept."; };
             SetView(settings.ClassicView);
         }
         void SetTheme(string name) {
@@ -211,7 +211,7 @@ namespace Pulse {
         }
         void ApplyPreset(Settings preset) {
             EndLearn(false); preset.Normalize();
-            settings.Pads = preset.Pads; settings.Inputs = preset.Inputs; settings.InstrumentNotes = preset.InstrumentNotes; settings.SampleFiles = preset.SampleFiles;
+            settings.Pads = preset.Pads; settings.Inputs = preset.Inputs; settings.InstrumentNotes = preset.InstrumentNotes; settings.OpenHatNote=preset.OpenHatNote; settings.HiHatController=preset.HiHatController; settings.SampleFiles = preset.SampleFiles;
             settings.Channel = preset.Channel; settings.Volume = preset.Volume; settings.Sound = preset.Sound; settings.MidiEnabled = preset.MidiEnabled;
             settings.ReverbEnabled = preset.ReverbEnabled; settings.ReverbAmount = preset.ReverbAmount;
             settings.OutputGainDb = preset.OutputGainDb;
