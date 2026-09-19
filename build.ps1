@@ -8,6 +8,9 @@ $facade = Get-ChildItem (Join-Path $env:WINDIR 'Microsoft.NET\assembly\GAC_MSIL\
 if (!$facade) { throw '.NET Framework 4.8 netstandard facade is required.' }
 $references += '/r:' + $facade.FullName
 $embedded = @()
+$references += '/r:' + (Join-Path $framework 'System.Web.Extensions.dll')
+$embedded += '/resource:' + (Join-Path $PSScriptRoot 'src\PreviewCertificate.ps1') + ',Pulse.PreviewCertificate.ps1'
+$embedded += '/resource:' + (Join-Path $PSScriptRoot 'src\LiveView.html') + ',Pulse.LiveView.html'
 foreach ($dependency in Get-ChildItem (Join-Path $PSScriptRoot 'vendor\NAudio') -Filter *.dll) {
     $references += '/r:' + $dependency.FullName
     $embedded += '/resource:' + $dependency.FullName + ',Pulse.Dependencies.' + $dependency.Name

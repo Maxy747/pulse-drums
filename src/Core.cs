@@ -73,7 +73,7 @@ namespace Pulse {
             KickRest = Math.Max(0,Math.Min(1023,KickRest)); KickDown = Math.Max(0,Math.Min(1023,KickDown));
             HatRest = Math.Max(0,Math.Min(1023,HatRest)); HatDown = Math.Max(0,Math.Min(1023,HatDown));
             PlayerStereoWidth = Clamp(PlayerStereoWidth,0,1);
-            OutputGainDb = Clamp(OutputGainDb,0,18);
+            OutputGainDb = Clamp(OutputGainDb,-60,60);
             ReverbAmount = Clamp(ReverbAmount,0,1);
             AsioDriver = AsioDriver ?? ""; CrosstalkPercent = Math.Max(0,Math.Min(70,CrosstalkPercent));
             if (ThemeName != "Red" && ThemeName != "Blue") ThemeName = "Green";

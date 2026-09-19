@@ -72,6 +72,9 @@ namespace Pulse {
         volatile AudioEngine audio;
         readonly TriggerFilter triggerFilter = new TriggerFilter();
         DrumConnection connection;
+        readonly LiveViewState liveView=new LiveViewState();
+        LiveViewServer browserPreview;
+        PreviewNetwork tabletPreview; bool tabletStarting,previewStopped;
         Forms.NotifyIcon tray;
         EventWaitHandle wake, quit;
         RegisteredWaitHandle wakeRegistration, quitRegistration;
@@ -89,6 +92,18 @@ namespace Pulse {
             Window.Height = Math.Min(Window.Height,SystemParameters.WorkArea.Height - 24);
             Window.SourceInitialized += delegate { int dark = 1; try { DwmSetWindowAttribute(new WindowInteropHelper(Window).Handle, 20, ref dark, 4); } catch { } };
             MakePads(); BindControls(); BuildKitControls(); BuildPedalControls(); SelectPad(0);
+            liveView.Controls=BrowserControl;
+            Get<Button>("TabletSetupButton").Click += delegate {
+                if(smoke) return;
+                if(tabletPreview!=null) { try { Process.Start(tabletPreview.SetupUrl); } catch(Exception e) { Report("iPad setup",e.Message); } }
+                else StartTabletPreview();
+            };
+            Get<Button>("TabletFirewallButton").Click += delegate { if(!smoke) try { PreviewNetwork.AllowFirewall(); } catch(Exception e) { Report("iPad access",e.Message); } };
+            Get<Button>("BrowserPreviewButton").Click += delegate {
+                if (smoke) return;
+                if (browserPreview == null) StartBrowserPreview();
+                if (browserPreview != null) try { Process.Start(browserPreview.Url); } catch (Exception e) { Report("Browser preview",e.Message); }
+            };
             if (warning != "") logs.Enqueue(warning);
             Window.Loaded += delegate {
                 if (smoke) {
@@ -98,6 +113,7 @@ namespace Pulse {
                 audio = new AudioEngine(); audio.Volume = (float)settings.Volume; audio.OutputGain = (float)Math.Pow(10,settings.OutputGainDb/20); audio.ReverbEnabled = settings.ReverbEnabled; audio.ReverbAmount = (float)settings.ReverbAmount; audio.ConfigureStereo(settings.PlayerStereoEnabled,settings.PlayerStereoWidth); if (settings.Sound) audio.Start(settings.AsioDriver); else audio.OutputStatus = "Audio released · MIDI only";
                 Get<Button>("AsioPanelButton").IsEnabled = audio.Asio != null;
                 StartSampleLibrary();
+                StartBrowserPreview();
                 connection = new DrumConnection(settings);
                 StartPedals();
                 connection.Status += (message, verified) => { connectionText = message; ready = verified; };
@@ -227,9 +243,39 @@ namespace Pulse {
             catch (Exception e) { dirty = false; Get<TextBlock>("SaveStatus").Text = "Could not save settings · see diagnostics"; logs.Enqueue(e.Message); }
         }
         void Enqueue(Frame f) { if (frames.Count > 512) { Frame discard; frames.TryDequeue(out discard); } frames.Enqueue(f); }
+        void StartBrowserPreview() {
+            try {
+                var server=new LiveViewServer(liveView);
+                try { server.Start(); } catch { server.Dispose(); throw; }
+                browserPreview=server; Get<Button>("BrowserPreviewButton").ToolTip=server.Url;
+                logs.Enqueue("Browser preview: " + server.Url);
+                Get<TextBox>("PreviewAddress").Text=server.Url;
+                StartTabletPreview();
+            } catch (Exception e) { logs.Enqueue("Browser preview unavailable: " + e.Message); Get<Button>("BrowserPreviewButton").ToolTip="Click to retry: " + e.Message; }
+        }
+        void StartTabletPreview() {
+            if(tabletStarting || tabletPreview!=null || previewStopped) return;
+            tabletStarting=true;
+            Get<Button>("TabletSetupButton").IsEnabled=false;
+            new Thread(() => {
+                var network=new PreviewNetwork(); string error=null;
+                try { network.Start(liveView); } catch(Exception e) { error=e.Message; network.Dispose(); }
+                Window.Dispatcher.BeginInvoke(new Action(() => {
+                    tabletStarting=false;
+                    if(previewStopped) { network.Dispose(); return; }
+                    Get<Button>("TabletSetupButton").IsEnabled=true;
+                    if(error!=null) { logs.Enqueue(error); Get<TextBox>("PreviewAddress").ToolTip=error; Get<Button>("TabletSetupButton").ToolTip=error; return; }
+                    tabletPreview=network; Get<TextBox>("PreviewAddress").Text=network.Url;
+                    Get<TextBox>("PreviewAddress").ToolTip="Open on your iPad after certificate setup. Same home network required. Select to copy.";
+                    Get<Button>("TabletSetupButton").ToolTip="On iPad Safari open "+network.SetupUrl;
+                    logs.Enqueue("iPad HTTPS: "+network.Url+" · setup: "+network.SetupUrl);
+                }));
+            }) { IsBackground=true,Name="Pulse tablet setup" }.Start();
+        }
         void Hit(int index, int velocity, bool preview, bool pedalClose = false) {
             var cfg = live; var p = cfg.Pads[cfg.Inputs[index]]; long now = clock.ElapsedMilliseconds;
             int output = Protocol.Velocity(velocity,p);
+            liveView.Hit(index,output,preview);
             Enqueue(new Frame(preview ? "PREVIEW" : "HIT",index,output));
             if (p.Muted || smoke) return;
             int hatMode = index == 0 && (pedalClose || (cfg.PedalsEnabled && pedalReady)) ? (pedalClose || hatClosed ? 1 : 2) : 0;
@@ -238,6 +284,7 @@ namespace Pulse {
         }
         void Tick() {
             TickPedals();
+            liveView.Update(settings.ThemeName,connectionText,ready,settings.PedalsEnabled && pedalReady,hatClosed,PedalMotion.Position(kickRaw,settings.KickRest,settings.KickDown),PedalMotion.Position(hatRaw,settings.HatRest,settings.HatDown),learning,settings.OutputGainDb);
             if (timer != null) timer.Interval = TimeSpan.FromMilliseconds(Window.IsVisible ? 25 : 250);
             Get<TextBlock>("StatusText").Text = connectionText;
             Get<System.Windows.Shapes.Ellipse>("StatusDot").Fill = Brush(ready ? "#C5F36B" : "#B7A26B");
@@ -300,6 +347,9 @@ namespace Pulse {
         void Shutdown() {
             exiting = true;
             if (timer != null) timer.Stop(); if (dirty) Save();
+            previewStopped=true;
+            if (tabletPreview != null) tabletPreview.Dispose();
+            if (browserPreview != null) browserPreview.Dispose();
             if (connection != null) connection.Dispose();
             if (pedals != null) pedals.Dispose();
             if (midiTimer != null) { using (var done = new ManualResetEvent(false)) { if (midiTimer.Dispose(done)) done.WaitOne(); } }
@@ -372,6 +422,13 @@ namespace Pulse {
                 Screenshot(System.IO.Path.Combine(folder,"pulse-reverb.png"));
                 Get<Slider>("OutputGainSlider").Value = 6;
                 if (settings.OutputGainDb != 6) throw new Exception("Overall gain slider failed");
+                BrowserControlUi("action=set&id=OutputGainSlider&value=60");
+                if(settings.OutputGainDb!=60 || masterGainKnob.Value!=60) throw new Exception("Browser master gain does not reach knob");
+                BrowserControlUi("action=set&id=OutputGainSlider&value=6.25");
+                if(settings.OutputGainDb!=6.25 || masterGainKnob.Value!=6.25) throw new Exception("Fine gain adjustment failed");
+                BrowserControlUi("action=set&id=MuteToggle&part=3&value=true");
+                if(!settings.Pads[settings.Inputs[3]].Muted) throw new Exception("Browser pad control target failed");
+                BrowserControlUi("action=set&id=MuteToggle&part=3&value=false");
                 Screenshot(System.IO.Path.Combine(folder,"pulse-output-gain.png"));
                 Get<Slider>("StereoWidthSlider").Value = 75;
                 if (!settings.PlayerStereoEnabled || settings.PlayerStereoWidth != .75) throw new Exception("Player stereo width failed");

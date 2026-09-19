@@ -12,6 +12,31 @@ namespace Pulse {
         [STAThread] public static int Main(string[] args) {
             try {
                 Frame f;
+                var browserState=new LiveViewState(); browserState.Hit(3,112,false); browserState.Hit(5,80,true);
+                Check(browserState.Json().Contains("\"total\":1") && browserState.Json().Contains("\"preview\":true"),"Browser counts accepted hits but not app auditions");
+                Check(LiveViewState.Quote("a\n\"b\\") == "\"a\\u000a\\\"b\\\\\"","Browser JSON escapes status strings");
+                using (var server=new LiveViewServer(browserState)) {
+                    browserState.Controls=body=>"{\"ok\":true}";
+                    server.Start(0);
+                    using (var client=new System.Net.WebClient()) {
+                        Check(client.DownloadString(server.Url).Contains("Eight-piece kit"),"Embedded browser page served on loopback");
+                        Check(client.DownloadString(server.Url+"state").Contains("\"total\":1"),"Browser snapshot uses actual hit state");
+                        bool forbidden=false; try { client.UploadString(server.Url+"control","action=hit"); } catch(System.Net.WebException e) { if(e.Response==null)throw new Exception("Browser HTTP rejection: "+e.ToString()); forbidden=((System.Net.HttpWebResponse)e.Response).StatusCode==System.Net.HttpStatusCode.Forbidden; }
+                        Check(forbidden,"Browser rejects writes without origin and token");
+                        client.Headers["Origin"]=server.Url.TrimEnd('/'); client.Headers["X-Pulse-Token"]=browserState.ControlToken;
+                        Check(client.UploadString(server.Url+"control","action=hit").Contains("true"),"Same-origin token authorizes touch control");
+                        client.Headers["Origin"]="https://unrelated.example"; forbidden=false;
+                        try { client.UploadString(server.Url+"control","action=hit"); } catch(System.Net.WebException e) { if(e.Response==null)throw new Exception("Browser HTTP rejection: "+e.ToString()); forbidden=((System.Net.HttpWebResponse)e.Response).StatusCode==System.Net.HttpStatusCode.Forbidden; }
+                        Check(forbidden,"Cross-origin writes are rejected even with token");
+                    }
+                    using (var socket=new System.Net.Sockets.TcpClient("127.0.0.1",new Uri(server.Url).Port)) {
+                        socket.ReceiveTimeout=2000; var stream=socket.GetStream(); var request=System.Text.Encoding.ASCII.GetBytes("GET /events HTTP/1.1\r\nHost: "+new Uri(server.Url).Authority+"\r\n\r\n"); stream.Write(request,0,request.Length);
+                        using (var reader=new StreamReader(stream)) { string line; do { line=reader.ReadLine(); } while (line != null && !line.StartsWith("data: ")); Check(line != null && line.Contains("\"total\":1"),"Browser receives real server-sent events"); browserState.Hit(0,100,false); do { line=reader.ReadLine(); } while (line != null && !line.Contains("\"total\":2")); Check(line != null,"New hit streamed without a desktop UI tick"); }
+                    }
+                    using (var socket=new System.Net.Sockets.TcpClient("127.0.0.1",new Uri(server.Url).Port)) {
+                        socket.ReceiveTimeout=2000; var stream=socket.GetStream(); var request=System.Text.Encoding.ASCII.GetBytes("GET /state HTTP/1.1\r\nHost: external.example\r\n\r\n"); stream.Write(request,0,request.Length); using (var reader=new StreamReader(stream)) Check(reader.ReadLine().Contains("403"),"Browser server rejects unrelated hosts");
+                    }
+                }
                 PedalFrame pf;
                 Check(PedalDecoder.Parse("PEDALS,4294967295,0,1023",out pf) && pf.Time == UInt32.MaxValue && pf.Hat == 1023,"Pedal full ADC and clock range");
                 foreach (string bad in new[] { "PEDALS,1,-1,4","PEDALS,1,4,1024","PEDALS,-1,4,5","PEDALS,1,4","RAW,0,12","PEDALS,1,NaN,4" }) Check(!PedalDecoder.Parse(bad,out pf),"Reject invalid pedal frame");
@@ -199,7 +224,7 @@ namespace Pulse {
                     boosted.Volume = 1; boosted.OutputGain = 2; boosted.SetSample(0,Enumerable.Repeat(.1f,24000).ToArray()); boosted.Hit(0,127);
                     var block = new short[22000]; boosted.MixBlock(block);
                     Check(Math.Abs(block[21998] - .1*.65*2*32767) < 2,"Overall gain boosts quiet audio after smoothing");
-                    boosted.Panic(); boosted.OutputGain = 8; boosted.SetSample(0,Enumerable.Repeat(1f,24000).ToArray()); boosted.Hit(0,127); boosted.MixBlock(block);
+                    boosted.Panic(); boosted.OutputGain = 1000; boosted.SetSample(0,Enumerable.Repeat(1f,24000).ToArray()); boosted.Hit(0,127); boosted.MixBlock(block);
                     Check(block.All(v => v > 0 && v <= 32112),"Maximum gain remains inside PCM limits");
                 }
                 for (int i = 0; i < AudioEngine.Rate*4; i++) {

@@ -68,7 +68,7 @@ The audio-device selector offers **Windows default output** and installed **ASIO
 
 **Reverb** in the Output panel adds stereo room ambience to samples and synth sounds on either audio driver. Toggle it on, then set the amount with the 0–100% slider. It starts off with 25% ready when enabled. Amount changes fade smoothly; turning it off clears the effect after a brief fade. Silence all clears its tail immediately. Both controls are saved on this PC and in named presets. MIDI notes sent to Ableton remain unchanged; use Ableton's own reverb for that instrument.
 
-**Overall gain** boosts the mixed drums and reverb by 0 to +18 dB before overload protection. It works with Windows and ASIO, changes smoothly, and is remembered across launches and saved presets. 0 dB preserves the original level; +6 dB approximately doubles signal amplitude below the limiter. The master volume still controls the final level. This does not change MIDI velocity or Ableton's instrument gain.
+**Master gain** adjusts the mixed drums and reverb from −60 to +60 dB with a rotary knob, fine Shift adjustment and a continuous slider before overload protection. It works with Windows and ASIO, changes smoothly, and is remembered across launches and saved presets. 0 dB preserves the original level; +6 dB approximately doubles signal amplitude below the limiter. The master volume still controls the final level. This does not change MIDI velocity or Ableton's instrument gain.
 
 **Player stereo** places every drum across the stereo field according to its horizontal position in the kit drawing, viewed from the player's seat. It starts enabled at 100% width. Hi-hat and crash are far left; snare and low tom are left of centre; kick is centred; mid tom, floor tom and ride move progressively right. The width slider narrows the placement; zero width or the toggle off preserves the original WAV channels. Changes are smoothed, and the settings persist in saved presets. Position follows the logical instrument when sensor inputs are remapped. Samples and synth voices are positioned before the shared stereo reverb on Windows and ASIO. This is stereo panning, not HRTF/head-tracked 3D audio. MIDI-only instruments need panning in Ableton.
 
@@ -145,3 +145,20 @@ Uses the .NET Framework 4.8 compiler shipped with Windows. Pinned NAudio ASIO/Co
 The WPF smoke test renders kit/classic/hit/setup screenshots and exercises assignment, cancel, reset, preset restore and control changes without opening a serial port or writing user settings. Actual pad identification and audible DAW reception require hands-on testing.
 
 Installed app: `%LOCALAPPDATA%\Programs\Pulse`. To remove it, exit the tray app, disable sign-in launch, and remove that folder and its Start menu shortcut. Settings, presets and samples can be retained or removed separately from `%LOCALAPPDATA%\PulseDrums`.
+
+
+## iPad / browser control (2.4)
+
+Pulse shows its LAN HTTPS address at the top. The desktop Browser preview button opens the same kit locally at `http://127.0.0.1:8765/`; that loopback address cannot reach the PC from an iPad.
+
+1. Keep Pulse running and connect the iPad to the same home network as the PC.
+2. Click **Allow iPad access** and approve the Windows administrator prompt. The firewall exception covers only Pulse TCP ports 8766–8785 from LocalSubnet; it does not expose the service to the internet.
+3. Click **iPad setup** on the PC to see the setup URL (normally `http://<PC-IP>:8776/`). Open that address in Safari on the iPad.
+4. Download the PC-specific Pulse certificate, install it in Settings → General → VPN & Device Management, then enable **Pulse Local Preview CA** under General → About → Certificate Trust Settings. Compare the certificate fingerprint with the PC setup page.
+5. Open the HTTPS link on that page (normally `https://<PC-IP>:8766/`). Optional: Safari → Share → Add to Home Screen.
+
+The private keys stay in the Windows current-user certificate store. Only the public CA certificate is downloadable. Setup HTTP exposes instructions and the certificate only; live LAN controls use TLS 1.2. Remove the installed profile to revoke trust on the iPad. Restart Pulse if your PC's network address changes. Ports automatically advance when occupied.
+
+**Touch play** enables multi-touch drum auditions through the PC's selected audio output. **Edit** lets you tap a part to choose its sample and edit its tuning. **Settings** exposes audio/ASIO, MIDI, pedals and calibration, sensitivity, setup/undo, startup, sounds, and named presets. Native ASIO panels and file/folder pickers open on the PC. Master gain is available directly beside the toolbar and in settings. Settings save on the PC. Network touch adds Wi-Fi latency and does not stream audio to Safari.
+
+The local network is the access boundary: devices that can reach the HTTPS page can use its controls. Commands require an exact matching Origin and a per-run request token; the server does not allow cross-origin access. Use on a trusted home network. Live hit publication never performs network I/O on the audio thread. Safari automatically reconnects after returning from the background. No cloud service or account is required.

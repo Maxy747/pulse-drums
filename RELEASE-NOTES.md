@@ -1,3 +1,11 @@
+Pulse 2.4.0 — iPad live kit, touch control and master gain.
+
+- Added a local live kit website with hit feedback, themes, focus, labels and tablet layouts.
+- Added LAN HTTPS, a top-of-app URL, one-time iPad certificate setup and a scoped Windows firewall helper.
+- Touch play auditions drums through the PC output; Edit and Settings mirror pad sounds, tuning, routing, pedals, setup/undo and named presets. Native dialogs remain on the PC.
+- Master gain now offers a knob and fine adjustment from −60 to +60 dB in desktop and browser, with smoothing and stereo overload protection.
+- Validated 574 assertions, all 360 sample files, WPF smoke checks and local TLS certificate verification. Physical iPad Safari requires the user's certificate trust step.
+
 Pulse 2.3.2 — main drums only kick.
 
 - Added Kick from main drums only to suppress pedal kick events before sound, MIDI and session counting, while retaining hi-hat pedal operation.

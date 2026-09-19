@@ -3,5 +3,5 @@ using System.Reflection;
 [assembly: AssemblyDescription("A compact, automatic Arduino drum controller for Windows")]
 [assembly: AssemblyCompany("Maxy747")]
 [assembly: AssemblyProduct("Pulse")]
-[assembly: AssemblyVersion("2.3.2.0")]
-[assembly: AssemblyFileVersion("2.3.2.0")]
+[assembly: AssemblyVersion("2.4.0.0")]
+[assembly: AssemblyFileVersion("2.4.0.0")]

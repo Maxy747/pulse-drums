@@ -18,8 +18,11 @@ namespace Pulse {
         readonly int[] sampleVersions = new int[8];
         readonly string[] sampleStates = Enumerable.Repeat("Synth fallback",8).ToArray();
         bool sampleUpdating;
+        GainKnob masterGainKnob;
         Pad SelectedPad { get { return settings.Pads[settings.Inputs[selected]]; } }
         void BuildKitControls() {
+            masterGainKnob=new GainKnob(); Get<ContentControl>("MasterGainKnobHost").Content=masterGainKnob;
+            masterGainKnob.Adjust+=value=>Get<Slider>("OutputGainSlider").Value=value;
             Get<CheckBox>("PlayerStereoToggle").IsChecked = settings.PlayerStereoEnabled;
             Get<Slider>("StereoWidthSlider").Value = settings.PlayerStereoWidth*100;
             Get<Slider>("StereoWidthSlider").IsEnabled = settings.PlayerStereoEnabled;
@@ -28,8 +31,9 @@ namespace Pulse {
             Get<CheckBox>("PlayerStereoToggle").Checked += stereoToggle; Get<CheckBox>("PlayerStereoToggle").Unchecked += stereoToggle;
             Get<Slider>("StereoWidthSlider").ValueChanged += delegate { if (updating) return; settings.PlayerStereoWidth = Get<Slider>("StereoWidthSlider").Value/100; Get<TextBlock>("StereoWidthValue").Text = Math.Round(settings.PlayerStereoWidth*100) + "%"; Changed(false); };
             Get<Slider>("OutputGainSlider").Value = settings.OutputGainDb;
-            Get<TextBlock>("OutputGainValue").Text = "+" + settings.OutputGainDb.ToString("0.0") + " dB";
-            Get<Slider>("OutputGainSlider").ValueChanged += delegate { if (updating) return; settings.OutputGainDb = Get<Slider>("OutputGainSlider").Value; Get<TextBlock>("OutputGainValue").Text = "+" + settings.OutputGainDb.ToString("0.0") + " dB"; Changed(false); };
+            masterGainKnob.Value=settings.OutputGainDb;
+            Get<TextBlock>("OutputGainValue").Text = settings.OutputGainDb.ToString("+0.00;-0.00;0.00") + " dB";
+            Get<Slider>("OutputGainSlider").ValueChanged += delegate { masterGainKnob.Value=Get<Slider>("OutputGainSlider").Value; if (updating) return; settings.OutputGainDb = masterGainKnob.Value; Get<TextBlock>("OutputGainValue").Text = settings.OutputGainDb.ToString("+0.00;-0.00;0.00") + " dB"; Changed(false); };
             Get<CheckBox>("ReverbToggle").IsChecked = settings.ReverbEnabled;
             Get<Slider>("ReverbSlider").Value = settings.ReverbAmount*100;
             Get<Slider>("ReverbSlider").IsEnabled = settings.ReverbEnabled;
@@ -226,7 +230,7 @@ namespace Pulse {
             }
             settings.SampleDefaultsApplied = true; updating = true;
             Get<CheckBox>("PlayerStereoToggle").IsChecked = settings.PlayerStereoEnabled; Get<Slider>("StereoWidthSlider").Value = settings.PlayerStereoWidth*100; Get<Slider>("StereoWidthSlider").IsEnabled = settings.PlayerStereoEnabled; Get<TextBlock>("StereoWidthValue").Text = Math.Round(settings.PlayerStereoWidth*100) + "%";
-            Get<Slider>("OutputGainSlider").Value = settings.OutputGainDb; Get<TextBlock>("OutputGainValue").Text = "+" + settings.OutputGainDb.ToString("0.0") + " dB";
+            Get<Slider>("OutputGainSlider").Value = settings.OutputGainDb; Get<TextBlock>("OutputGainValue").Text = settings.OutputGainDb.ToString("+0.00;-0.00;0.00") + " dB";
             Get<CheckBox>("ReverbToggle").IsChecked = settings.ReverbEnabled; Get<Slider>("ReverbSlider").Value = settings.ReverbAmount*100; Get<Slider>("ReverbSlider").IsEnabled = settings.ReverbEnabled; Get<TextBlock>("ReverbValue").Text = Math.Round(settings.ReverbAmount*100) + "%";
             Get<ComboBox>("ChannelCombo").SelectedItem = settings.Channel; Get<Slider>("VolumeSlider").Value = settings.Volume * 100;
             Get<ComboBox>("TransposeCombo").SelectedItem = settings.Transpose; Get<Slider>("LengthSlider").Value = settings.NoteOffMs; Get<TextBlock>("LengthValue").Text = settings.NoteOffMs.ToString();
