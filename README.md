@@ -1,4 +1,4 @@
-# Pulse 2
+# Pulse
 
 Native Windows control for an Arduino piezo drum kit: automatic USB connection, a playable top-down kit, pad learning, stereo samples and MIDI.
 
