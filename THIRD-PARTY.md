@@ -21,3 +21,7 @@ Kit 1 has recorded 10-inch and 13-inch toms, without a separate 12-inch tom. Its
 ## Arduino interface
 
 Serial compatibility is based on https://github.com/marwans200/Arduino-Drums. Pulse is independently implemented; upstream Python/Arduino source code and executables are not bundled.
+
+## Android companion
+
+`usb-serial-for-android` 3.11.0 (https://github.com/mik3y/usb-serial-for-android), MIT license; resolved by Gradle from JitPack. Generated synth sounds are project code. The optional V05 downloader retrieves original GSCW samples directly from the pinned source above, shows the original license, and stores audio only in the user's app-private data. The APK contains the license notice but no GSCW WAVs.

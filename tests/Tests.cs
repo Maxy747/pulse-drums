@@ -11,6 +11,18 @@ namespace Pulse {
         static void Check(bool ok, string message) { if (!ok) throw new Exception(message); passed++; }
         [STAThread] public static int Main(string[] args) {
             try {
+                string mobilePayload;string session=Guid.NewGuid().ToString();var gate=new MobilePacketGate("12345678");
+                string packet="PULSE_M1|12345678|"+session+"|1|HIT,2,90,300";
+                Check(gate.Accept(packet,"127.0.0.1",0,out mobilePayload)&&mobilePayload=="HIT,2,90,300","Phone relay accepts authenticated bounded hit");
+                Check(!gate.Accept(packet,"127.0.0.1",1,out mobilePayload),"Phone relay rejects duplicate UDP hits");
+                Check(!gate.Accept(packet.Replace("12345678","87654321").Replace("|1|","|2|"),"127.0.0.1",2,out mobilePayload),"Phone relay rejects wrong pairing code");
+                Check(!gate.Accept(packet.Replace(session,Guid.NewGuid().ToString()),"127.0.0.2",2,out mobilePayload),"Phone relay locks active session");
+                foreach(string invalid in new[]{"HIT,8,90,300","HIT,0,128,300","HIT,0,90,1024","RAW,0,-1","TOUCH,9,127","PEDALS,1,0,1024","HIT,0,0,1"})Check(!MobilePacketGate.ValidPayload(invalid),"Phone payload range validation");
+                Check(MobilePacketGate.ValidPayload("PEDALS,4294967295,1023,0"),"Phone relay preserves pedal clock wrap");
+                using(var receiver=new MobileReceiver())using(var client=new System.Net.Sockets.UdpClient()) {
+                    client.Client.ReceiveTimeout=1500;string id=Guid.NewGuid().ToString();var bytes=System.Text.Encoding.ASCII.GetBytes("PULSE_M1|"+receiver.Code+"|"+id+"|1|PING");client.Send(bytes,bytes.Length,"127.0.0.1",9876);
+                    var endpoint=new System.Net.IPEndPoint(System.Net.IPAddress.Any,0);Check(System.Text.Encoding.ASCII.GetString(client.Receive(ref endpoint))=="PULSE_ACK|"+id&&receiver.Connected,"Real UDP phone handshake and heartbeat");
+                }
                 Frame f;
                 var calibrationSettings=new Settings();calibrationSettings.Normalize();
                 var calibrationTest=new ThresholdLearning(calibrationSettings,3,false,0);int sensor=calibrationSettings.Inputs[3];

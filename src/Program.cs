@@ -91,7 +91,7 @@ namespace Pulse {
             using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Pulse.Main.xaml")) using (var reader = new StreamReader(stream)) Window = Theme.Load(reader.ReadToEnd(), settings.ThemeName);
             Window.Height = Math.Min(Window.Height,SystemParameters.WorkArea.Height - 24);
             Window.SourceInitialized += delegate { int dark = 1; try { DwmSetWindowAttribute(new WindowInteropHelper(Window).Handle, 20, ref dark, 4); } catch { } };
-            MakePads(); BindControls(); BuildKitControls(); BuildPedalControls(); BuildCalibrationControls(); SelectPad(0);
+            MakePads(); BindControls(); BuildKitControls(); BuildPedalControls(); BuildCalibrationControls(); BuildMobileControls(); SelectPad(0);
             liveView.Controls=BrowserControl;
             Get<Button>("TabletSetupButton").Click += delegate {
                 if(smoke) return;
@@ -116,12 +116,12 @@ namespace Pulse {
                 StartBrowserPreview();
                 connection = new DrumConnection(settings);
                 StartPedals();
-                connection.Status += (message, verified) => { connectionText = message; ready = verified; };
+                connection.Status += (message, verified) => { if(!mobileEnabled) { connectionText = message; ready = verified; } };
                 connection.PortsChanged += p => { discovered = p; if (pedals != null) pedals.SetPorts(p); };
                 connection.Identified += id => identified = id;
                 connection.Log += message => logs.Enqueue(message);
-                connection.Received += ReceiveInput;
-                connection.Start();
+                connection.Received += f => { if(!mobileEnabled) ReceiveInput(f); };
+                connection.Start(); RestoreMobile();
                 midiTimer = new System.Threading.Timer(_ => { if (!learning) triggerFilter.Flush(live,clock.ElapsedMilliseconds,AcceptTrigger); midi.Tick(clock.ElapsedMilliseconds); }, null, 0, 2);
                 MakeTray();
                 wake = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\PulseDrumsShow");
@@ -291,7 +291,7 @@ namespace Pulse {
             if (cfg.MidiEnabled) midi.Hit(cfg.MidiNoteForPart(index,hatMode==2),output,cfg.Channel,now,cfg.NoteOffMs);
         }
         void Tick() {
-            TickPedals();
+            TickMobile(); TickPedals();
             liveView.Update(settings.ThemeName,connectionText,ready,settings.PedalsEnabled && pedalReady,hatClosed,PedalMotion.Position(kickRaw,settings.KickRest,settings.KickDown),PedalMotion.Position(hatRaw,settings.HatRest,settings.HatDown),learning || calibrating,settings.OutputGainDb,calibrating ? Get<TextBlock>("CalibrationTitle").Text+" · "+Get<TextBlock>("CalibrationHint").Text : "");
             if (timer != null) timer.Interval = TimeSpan.FromMilliseconds(Window.IsVisible ? 25 : 250);
             Get<TextBlock>("StatusText").Text = connectionText;
@@ -357,6 +357,7 @@ namespace Pulse {
             if(calibrating) { StopCalibration(false); if(connection!=null)connection.WaitForThresholdWrites(); }
             exiting = true;
             if (timer != null) timer.Stop(); if (dirty) Save();
+            mobileEnabled=false; if(mobile!=null)mobile.Dispose();
             previewStopped=true;
             if (tabletPreview != null) tabletPreview.Dispose();
             if (browserPreview != null) browserPreview.Dispose();

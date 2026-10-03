@@ -14,6 +14,7 @@ namespace Pulse {
             Get<Button>("CalibrationApply").Click+=delegate { StopCalibration(true); };
         }
         void StartCalibration(bool all) {
+            if(mobileEnabled){Get<TextBlock>("LastHit").Text="Threshold learning requires the drum Nano connected directly to this PC.";return;}
             if(!ready&&!smoke){Get<TextBlock>("LastHit").Text="Connect the main Arduino and hit a pad before calibrating.";return;}
             if(calibrating)StopCalibration(false); EndLearn(false);
             calibration=new ThresholdLearning(settings,selected,all,clock.ElapsedMilliseconds);calibrating=true;calibrationRestored=false;

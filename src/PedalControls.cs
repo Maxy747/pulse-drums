@@ -80,11 +80,12 @@ namespace Pulse {
         void StartPedals() {
             pedals=new PedalConnection(settings);
             pedals.Status += (message,verified) => {
+                if(mobileEnabled)return;
                 pedalStatus=message; pedalReady=verified; logs.Enqueue("Pedals: " + message);
                 if (!verified) { lock (pedalGate) { pedalMotion.Reset(); lastPedalCc=-1; } var a=audio; if (a != null) a.ChokeHat(); }
             };
             pedals.Identified += id => pedalIdentified=id;
-            pedals.Received += ReceivePedals; pedals.Start();
+            pedals.Received += f => { if(!mobileEnabled) ReceivePedals(f); }; pedals.Start();
         }
         void ReceivePedals(PedalFrame f) {
             if (exiting) return;

@@ -89,3 +89,11 @@ Retained from 2.1.0:
 Validation: 462 local assertions, 360 WAV decodes, WPF interaction/render checks, an eight-second polyphony/allocation stress run with no empty Windows audio queues, and actual Focusrite USB ASIO initialization/audio callbacks. The Scarlett reported 32 samples and 3.2 ms output latency; this is not end-to-end latency. Audible cleanliness and physical crosstalk tuning still require playing the kit.
 
 Extract the ZIP and run install.ps1. Existing samples and settings are retained. Samples download directly from the upstream library only if missing. Pulse.exe remains standalone; embedded ASIO dependencies and their licenses are documented in THIRD-PARTY.md.
+
+## 2.6.0 — Android USB OTG companion
+
+- New Android app: multi-Nano USB serial, matching kit view/themes, two-hit mapping with undo, calibrated/swappable pedals, phone stereo sample playback, V05 acoustic download, WAV import and per-pad/master gains.
+- Phone / PC Wi-Fi / both output modes; bounded UDP event relay with pairing, heartbeat, session ownership and duplicate rejection.
+- PC Phone input switch, persistent pairing, local-subnet firewall helper, audio/ASIO/MIDI integration and continued browser feedback. Direct USB input is suppressed while phone input is enabled.
+- Phone owns USB threshold settings. Desktop automatic threshold calibration remains direct-PC-USB only and explains this when phone input is active.
+- Android 8+; keep the phone app open. Emulator and protocol tests pass; real phone OTG and latency remain hardware validation tasks.

@@ -2,3 +2,9 @@ bin/
 artifacts/*.log
 artifacts/*.xml
 *.user
+
+android/.gradle/
+android/**/build/
+android/local.properties
+*.jks
+*.keystore

@@ -1,0 +1,20 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.pulse.mobile'
+    compileSdk 35
+    defaultConfig { applicationId 'com.pulse.mobile'; minSdk 26; targetSdk 35; versionCode 1; versionName '1.0.0' }
+    signingConfigs {
+        mobileRelease {
+            if (System.getenv('PULSE_ANDROID_KEYSTORE')) {
+                storeFile file(System.getenv('PULSE_ANDROID_KEYSTORE'))
+                storePassword System.getenv('PULSE_ANDROID_STORE_PASSWORD')
+                keyAlias 'pulse-mobile'
+                keyPassword System.getenv('PULSE_ANDROID_STORE_PASSWORD')
+            }
+        }
+    }
+    buildTypes { release { if (System.getenv('PULSE_ANDROID_KEYSTORE')) signingConfig signingConfigs.mobileRelease } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+dependencies { implementation 'com.github.mik3y:usb-serial-for-android:3.11.0'; testImplementation 'junit:junit:4.13.2' }
+
