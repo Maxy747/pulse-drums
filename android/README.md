@@ -5,7 +5,7 @@ Connect the drum Nano and pedal Nano to an Android phone through a USB OTG hub. 
 ## Install and play
 
 1. Copy **Pulse-Mobile-Android.apk** to the phone and open it. Android may ask you to allow installation from the browser/file manager you used. Requires **Android 8.0+ and USB host/OTG support**. This APK is not an iPhone app.
-2. Open Pulse Mobile, connect the hub and both Nanos, and accept Android's USB permission prompt for each device. Use a powered hub if the phone cannot supply enough power. Some phones require enabling OTG in system settings.
+2. Connect the hub and both Nanos. Android offers to open Pulse Mobile for each Nano (CH340/CH341, FTDI, CP210x and Arduino USB IDs); tick **Always** so later connections need no prompt. Otherwise open Pulse Mobile and accept the USB permission prompt for each device. Use a powered hub if the phone cannot supply enough power. Some phones require enabling OTG in system settings.
 3. Select **Phone output**. Tap a drum to audition; connect wired headphones/USB audio or use the phone speaker. The app follows Android's current media-output route. Bluetooth adds delay.
 4. The app includes generated drum sounds. **Download V05 acoustic kit** fetches nine original GSCW samples directly from the user's sample repository after displaying its license. No GSCW audio is redistributed in the APK. Samples remain available offline. **Import WAV** replaces the selected drum; the open hi-hat has a separate import button.
 5. Use **Assign all** or **Assign pad**, then strike the requested physical pad twice, at least 350 ms apart. The next part appears automatically. Undo restores the last assignment and listens for it again. Swapped inputs stay one-to-one.
@@ -17,7 +17,7 @@ Connect the drum Nano and pedal Nano to an Android phone through a USB OTG hub. 
 
 1. Install/run **Pulse Windows 2.6.0+** on the same local network.
 2. Enable **Phone input** near the top. It shows the PC IPv4 address and an eight-digit pairing code. If needed, click **Allow phone Wi-Fi** and accept the Windows administrator prompt for the local-subnet UDP 9876 firewall rule.
-3. On the phone choose **Pulse PC over Wi-Fi** or **Phone + Pulse PC**. Enter the address (no `https://` and no port), enter the code, and press **Save Wi-Fi connection**. The status must say **Pulse PC connected**.
+3. On the phone tap **Find Pulse PC automatically** within two minutes of switching on Phone input. The phone broadcasts on the local network, Pulse answers with its address and pairing code, and the phone selects **Pulse PC** output and connects. The PC header shows the remaining auto-setup time. After that window, Pulse still answers with its name (not the code), so an already-paired phone re-finds the PC when its address changes. The phone also searches by itself at first launch, when Wi-Fi reconnects and when the PC stops replying. Manual address and code entry remains available.
 4. Pulse's existing audio/ASIO device, samples, MIDI output, note mappings and trigger protection are used on the PC. Enable pedals in the PC app if using them. The PC receives raw physical input numbers and pedal readings, so its mapping and pedal calibration are independent of the phone's standalone settings. Use the PC's kit setup if its assignments differ.
 
 The receiver and pairing code persist locally. Disabling Phone input returns to direct PC USB input. Local USB performance input is ignored while Phone input is enabled, preventing duplicate routing. The website/browser preview continues to show received hits.

@@ -19,6 +19,13 @@ namespace Pulse {
                 Check(!gate.Accept(packet.Replace(session,Guid.NewGuid().ToString()),"127.0.0.2",2,out mobilePayload),"Phone relay locks active session");
                 foreach(string invalid in new[]{"HIT,8,90,300","HIT,0,128,300","HIT,0,90,1024","RAW,0,-1","TOUCH,9,127","PEDALS,1,0,1024","HIT,0,0,1"})Check(!MobilePacketGate.ValidPayload(invalid),"Phone payload range validation");
                 Check(MobilePacketGate.ValidPayload("PEDALS,4294967295,1023,0"),"Phone relay preserves pedal clock wrap");
+                Check(MobilePacketGate.DiscoveryReply("PULSE_FIND1|abcd-1234","DESK|TOP","12345678",true)=="PULSE_HERE1|abcd-1234|DESKTOP|12345678","Discovery reply carries sanitized name and code while pairing");
+                Check(MobilePacketGate.DiscoveryReply("PULSE_FIND1|abcd-1234","Desk","12345678",false)=="PULSE_HERE1|abcd-1234|Desk|","Discovery reply withholds code after pairing window");
+                foreach(string bad in new[]{null,"PULSE_FIND1|short","PULSE_FIND1|bad|nonce1","PULSE_M1|12345678|x|1|PING"})Check(MobilePacketGate.DiscoveryReply(bad,"Desk","12345678",true)==null,"Discovery ignores malformed requests");
+                using(var receiver=new MobileReceiver())using(var client=new System.Net.Sockets.UdpClient()) {
+                    client.Client.ReceiveTimeout=1500;var find=System.Text.Encoding.ASCII.GetBytes("PULSE_FIND1|nonce-0001");client.Send(find,find.Length,"127.0.0.1",9876);
+                    var found=new System.Net.IPEndPoint(System.Net.IPAddress.Any,0);Check(System.Text.Encoding.ASCII.GetString(client.Receive(ref found)).EndsWith("|"+receiver.Code)&&receiver.PairingSecondsLeft>0,"Real UDP discovery during pairing window");
+                }
                 using(var receiver=new MobileReceiver())using(var client=new System.Net.Sockets.UdpClient()) {
                     client.Client.ReceiveTimeout=1500;string id=Guid.NewGuid().ToString();var bytes=System.Text.Encoding.ASCII.GetBytes("PULSE_M1|"+receiver.Code+"|"+id+"|1|PING");client.Send(bytes,bytes.Length,"127.0.0.1",9876);
                     var endpoint=new System.Net.IPEndPoint(System.Net.IPAddress.Any,0);Check(System.Text.Encoding.ASCII.GetString(client.Receive(ref endpoint))=="PULSE_ACK|"+id&&receiver.Connected,"Real UDP phone handshake and heartbeat");
