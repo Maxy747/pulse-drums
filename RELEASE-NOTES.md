@@ -1,3 +1,12 @@
+Pulse 2.7.0 + Pulse Mobile 1.1.0 — PC look on Android, landscape and automatic setup.
+
+- Pulse Mobile now uses the Windows kit artwork, palette and controls, including green, red and blue themes. Portrait pins the kit above scrolling settings; landscape puts the kit beside a pad-settings column. Rotation does not restart audio or USB.
+- Pad gain and trigger/re-arm thresholds are inline sliders; thresholds are sent to the drum Nano when released.
+- Wi-Fi auto-setup: the phone broadcasts on UDP 9876 and Pulse answers with its name. For two minutes after Phone input is switched on, the answer also carries the pairing code, so the phone configures itself. Afterwards only the name is shared, letting a paired phone re-find the PC when its address changes. The phone also searches at first launch, on Wi-Fi reconnect and when the PC stops replying.
+- USB auto-detect: plugging in a CH340/CH341, FTDI, CP210x or Arduino Nano offers to open Pulse Mobile; choosing Always skips later permission prompts.
+- Android CI now builds the debug APK (sdkmanager is called by its SDK path).
+- Validated 610 Windows assertions including a real UDP discovery round trip, 12 Android unit tests, Android lint, and discovery against an installed PC with several virtual adapters. Physical phone OTG and over-the-air Wi-Fi discovery still need a phone test.
+
 Pulse 2.5.0 — per-drum audio gain and guided threshold learning.
 
 - Added −60 to +36 dB sample gain for each logical instrument, independent of MIDI velocity, saved in settings/presets and exposed in browser Edit.
