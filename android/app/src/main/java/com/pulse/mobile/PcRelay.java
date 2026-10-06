@@ -39,6 +39,10 @@ final class PcRelay implements AutoCloseable {
     }
   }
 
+  boolean connected() {
+    return enabled && System.nanoTime() / 1000000 - acknowledged < 2500;
+  }
+
   void configure(String host, String code, boolean enabled) {
     this.enabled = false;
     this.host = host.trim();

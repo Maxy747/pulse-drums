@@ -29,6 +29,10 @@ final class KitView extends View {
   final DashPathEffect dash;
   final float density;
   int selected = 0, learning = -1;
+  // Idle gradients are cached; only pieces that are glowing allocate a fresh one per frame.
+  final Shader[] idle = new Shader[8];
+  Shader stage;
+  int cachedTheme = -1, stageW, stageH;
   Listener listener;
 
   KitView(Context c, Listener l) {
@@ -73,14 +77,21 @@ final class KitView extends View {
     long now = SystemClock.elapsedRealtime();
     float corner = 14 * density;
     paint.setStyle(Paint.Style.FILL);
-    paint.setShader(
-        new RadialGradient(
-            getWidth() / 2f,
-            getHeight() * .42f,
-            Math.max(getWidth(), getHeight()) * .7f,
-            Palette.c(0xff131d15),
-            Palette.c(0xff090e0b),
-            Shader.TileMode.CLAMP));
+    if (cachedTheme != Palette.theme || stageW != getWidth() || stageH != getHeight()) {
+      cachedTheme = Palette.theme;
+      stageW = getWidth();
+      stageH = getHeight();
+      java.util.Arrays.fill(idle, null);
+      stage =
+          new RadialGradient(
+              stageW / 2f,
+              stageH * .42f,
+              Math.max(stageW, stageH) * .7f,
+              Palette.c(0xff131d15),
+              Palette.c(0xff090e0b),
+              Shader.TileMode.CLAMP);
+    }
+    paint.setShader(stage);
     oval.set(0, 0, getWidth(), getHeight());
     c.drawRoundRect(oval, corner, corner, paint);
     paint.setShader(null);
@@ -172,14 +183,18 @@ final class KitView extends View {
       }
     }
     paint.setStyle(Paint.Style.FILL);
-    paint.setShader(
-        new RadialGradient(
-            x - r * .36f,
-            y - ry * .56f,
-            r * 1.75f,
-            Palette.mix(0xff124021, 0xff176f2c, energy),
-            Palette.mix(0xff091b10, 0xff073c18, energy),
-            Shader.TileMode.CLAMP));
+    if (energy > 0 || idle[i] == null) {
+      Shader head =
+          new RadialGradient(
+              x - r * .36f,
+              y - ry * .56f,
+              r * 1.75f,
+              Palette.mix(0xff124021, 0xff176f2c, energy),
+              Palette.mix(0xff091b10, 0xff073c18, energy),
+              Shader.TileMode.CLAMP);
+      if (energy == 0) idle[i] = head;
+      paint.setShader(head);
+    } else paint.setShader(idle[i]);
     ellipse(c, x, y, r, ry);
     paint.setShader(null);
     paint.setStyle(Paint.Style.STROKE);

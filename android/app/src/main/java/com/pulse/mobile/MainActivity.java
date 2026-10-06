@@ -34,6 +34,11 @@ public final class MainActivity extends Activity {
   EditText host, code;
   String hostDraft, codeDraft;
   int outputMode, sessionHits;
+  LinearLayout outputChoice;
+  TextView findText;
+  volatile boolean discovering;
+  long lastDiscovery = -60000, lastConnected;
+  android.net.ConnectivityManager.NetworkCallback network;
   int[] inputs = {2, 6, 4, 1, 3, 0, 5, 7};
   final long[] lastHit = new long[8];
   long lastStrong = -1000;
@@ -115,6 +120,8 @@ public final class MainActivity extends Activity {
     audioFocused = manager.requestAudioFocus(focus) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
     build();
     configureRelay();
+    if (prefs.getString("host", "").isEmpty()) discover(false);
+    watchNetwork();
     usb =
         new UsbHub(
             this,
@@ -425,16 +432,17 @@ public final class MainActivity extends Activity {
     head.addView(u.caption("Output"), new LinearLayout.LayoutParams(0, -2, 1));
     head.addView(u.muted("Stereo sample engine"));
     c.addView(head);
-    u.add(
-        c,
+    outputChoice =
         u.segmented(
             OUTPUTS,
             outputMode,
             n -> {
               outputMode = n;
               configureRelay();
-            }),
-        10);
+              if (n != 0 && relay.host.isEmpty()) discover(true);
+              refreshStatus();
+            });
+    u.add(c, outputChoice, 10);
     int level = Math.round(prefs.getFloat("volume", .8f) * 100);
     volumeRow =
         u.new SliderRow(
@@ -450,6 +458,13 @@ public final class MainActivity extends Activity {
     u.add(c, volumeRow, 14);
 
     u.add(c, u.caption("Pulse PC over Wi-Fi"), 14);
+    u.add(c, u.primary("Find Pulse PC automatically", () -> discover(true)), 8);
+    findText =
+        u.muted(
+            "On the PC, switch on Phone input. For two minutes it lets this phone set itself up"
+                + " — no typing needed.");
+    u.add(c, findText, 6);
+    u.add(c, u.caption("Or enter manually"), 14);
     host =
         u.field(
             "PC IPv4 address shown in Pulse",
@@ -685,7 +700,60 @@ public final class MainActivity extends Activity {
     if (host == null || code == null) return;
     String h = host.getText().toString().trim(), c = code.getText().toString().trim();
     prefs.edit().putString("host", h).putString("code", c).putInt("mode", outputMode).apply();
+    if (h.equals(relay.host) && c.equals(relay.code) && (outputMode != 0) == relay.enabled) return;
     relay.configure(h, c, outputMode != 0);
+  }
+
+  /** Broadcasts for Pulse PCs and fills address (and code, while the PC's pairing is open). */
+  void discover(boolean manual) {
+    if (discovering) return;
+    discovering = true;
+    lastDiscovery = SystemClock.elapsedRealtime();
+    if (manual && findText != null) findText.setText("Searching the local network…");
+    String savedName = prefs.getString("pcName", "");
+    new Thread(
+            () -> {
+              List<PcDiscovery.Found> all = PcDiscovery.find(1600);
+              ui.post(
+                  () -> {
+                    discovering = false;
+                    if (!isFinishing()) found(all, savedName, manual);
+                  });
+            },
+            "Pulse discovery")
+        .start();
+  }
+
+  void found(List<PcDiscovery.Found> all, String savedName, boolean manual) {
+    PcDiscovery.Found pc = PcDiscovery.choose(all, savedName);
+    if (pc == null) {
+      if (manual)
+        findText.setText(
+            all.isEmpty()
+                ? "No Pulse PC answered. Check both are on the same Wi-Fi, Phone input is on, and"
+                    + " “Allow phone Wi-Fi” was accepted on the PC."
+                : all.size() + " Pulse PCs found. Turn Phone input off and on at the one to use.");
+      return;
+    }
+    // A PC without pairing open only refreshes the address of the one already paired.
+    if (pc.code.isEmpty() && !pc.name.equals(savedName) && code.getText().length() == 0) {
+      host.setText(pc.address);
+      findText.setText(
+          "Found " + pc.name + ". Enter its code, or turn Phone input off and on at the PC.");
+      return;
+    }
+    host.setText(pc.address);
+    if (!pc.code.isEmpty()) code.setText(pc.code);
+    prefs.edit().putString("pcName", pc.name).apply();
+    if (manual && outputMode == 0) {
+      outputMode = 1;
+      for (int i = 0; i < outputChoice.getChildCount(); i++)
+        new Ui(this).mark((Button) outputChoice.getChildAt(i), i == outputMode);
+    }
+    configureRelay();
+    findText.setText("Paired with " + pc.name + " · " + pc.address);
+    refreshStatus();
+    if (manual) toast("Connected to " + pc.name);
   }
 
   void select() {
@@ -869,6 +937,11 @@ public final class MainActivity extends Activity {
     liveText.setText((drums ? "Drums connected" : "Waiting for drum Nano") + " · " + target);
     usbText.setText(usbStatus + "\nDrums: " + drumDevice + " · Pedals: " + pedalDevice);
     relayText.setText(outputMode == 0 ? "PC relay off · phone output only" : relay.status);
+    long now = SystemClock.elapsedRealtime();
+    if (relay.connected()) lastConnected = now;
+    // PC address changed (DHCP) or PC restarted: look again quietly, at most every 15 s.
+    else if (outputMode != 0 && now - lastConnected > 4000 && now - lastDiscovery > 15000)
+      discover(false);
     boolean live = SystemClock.elapsedRealtime() - pedalSeen < 500;
     pedalText.setText(
         live
@@ -1012,7 +1085,47 @@ public final class MainActivity extends Activity {
   }
 
   @Override
+  protected void onNewIntent(Intent intent) {
+    super.onNewIntent(intent);
+    // Launched by plugging in a Nano: open it now instead of waiting for the next scan.
+    if (usb != null) usb.scan();
+  }
+
+  @Override
+  protected void onResume() {
+    super.onResume();
+    if (usb != null) usb.scan();
+  }
+
+  /** Re-runs discovery whenever Wi-Fi (re)connects. */
+  void watchNetwork() {
+    android.net.ConnectivityManager cm =
+        (android.net.ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+    if (cm == null) return;
+    network =
+        new android.net.ConnectivityManager.NetworkCallback() {
+          @Override
+          public void onAvailable(android.net.Network n) {
+            ui.postDelayed(() -> discover(false), 800);
+          }
+        };
+    try {
+      cm.registerDefaultNetworkCallback(network);
+    } catch (RuntimeException e) {
+      network = null;
+    }
+  }
+
+  @Override
   protected void onDestroy() {
+    if (network != null) {
+      android.net.ConnectivityManager cm =
+          (android.net.ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+      try {
+        cm.unregisterNetworkCallback(network);
+      } catch (RuntimeException ignored) {
+      }
+    }
     ui.removeCallbacksAndMessages(null);
     if (usb != null) usb.close();
     if (relay != null) relay.close();
