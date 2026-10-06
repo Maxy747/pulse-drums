@@ -75,7 +75,56 @@ final class PcDiscovery {
     } catch (Exception ignored) {
       // No network: report nothing found.
     }
-    return new ArrayList<>(found.values());
+    return onePerPc(new ArrayList<>(found.values()), localSubnets());
+  }
+
+  /**
+   * A PC with VPN/VM adapters can answer from several addresses; keep one per name, preferring an
+   * address on one of this device's own subnets (given as {network, prefixLength} pairs).
+   */
+  static List<Found> onePerPc(List<Found> all, List<int[]> subnets) {
+    Map<String, Found> best = new LinkedHashMap<>();
+    for (Found f : all) {
+      Found current = best.get(f.name);
+      if (current == null || (!local(current.address, subnets) && local(f.address, subnets)))
+        best.put(f.name, f);
+    }
+    return new ArrayList<>(best.values());
+  }
+
+  static boolean local(String address, List<int[]> subnets) {
+    int ip = ipv4(address);
+    for (int[] s : subnets) {
+      int mask = s[1] == 0 ? 0 : -1 << (32 - s[1]);
+      if ((ip & mask) == (s[0] & mask)) return true;
+    }
+    return false;
+  }
+
+  static int ipv4(String address) {
+    String[] p = address.split("\\.");
+    if (p.length != 4) return 0;
+    int v = 0;
+    try {
+      for (String part : p) v = (v << 8) | (Integer.parseInt(part) & 255);
+    } catch (NumberFormatException e) {
+      return 0;
+    }
+    return v;
+  }
+
+  static List<int[]> localSubnets() {
+    List<int[]> out = new ArrayList<>();
+    try {
+      for (NetworkInterface n : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+        if (!n.isUp() || n.isLoopback()) continue;
+        for (InterfaceAddress a : n.getInterfaceAddresses())
+          if (a.getAddress() instanceof Inet4Address)
+            out.add(new int[] {ipv4(a.getAddress().getHostAddress()), a.getNetworkPrefixLength()});
+      }
+    } catch (Exception ignored) {
+    }
+    return out;
   }
 
   static Set<InetAddress> broadcastAddresses() {
