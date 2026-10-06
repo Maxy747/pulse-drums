@@ -2,25 +2,38 @@ package com.pulse.mobile;
 
 import android.app.*;
 import android.content.*;
-import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.media.*;
 import android.os.*;
+import android.text.InputType;
+import android.text.TextUtils;
 import android.view.*;
 import android.widget.*;
 import java.io.*;
 import java.util.*;
 
 public final class MainActivity extends Activity {
+  static final int[] DEFAULT_HITS = {140, 20, 20, 20, 10, 60, 10, 10},
+      DEFAULT_RESETS = {40, 5, 10, 5, 1, 1, 5, 9};
+  static final String[] OUTPUTS = {"Phone", "Pulse PC", "Both"};
+  static final int[] GUARDS = {110, 70, 35};
+
   final Handler ui = new Handler(Looper.getMainLooper());
   SharedPreferences prefs;
   DrumAudio audio;
   UsbHub usb;
   PcRelay relay;
   KitView kit;
-  TextView status, selection, learnText, pedalText;
+  TextView liveText, hitsText, padName, padInput, soundName, thresholdNote;
+  TextView learnTitle, learnText, setupText, pedalText, usbText, relayText;
+  Ui.SliderRow gainRow, hitRow, resetRow, volumeRow;
+  Ui.Meter kickMeter, hatMeter;
+  Button openHat;
+  LinearLayout learnCard;
   EditText host, code;
-  Spinner mode;
-  LinearLayout root;
+  String hostDraft, codeDraft;
+  int outputMode, sessionHits;
   int[] inputs = {2, 6, 4, 1, 3, 0, 5, 7};
   final long[] lastHit = new long[8];
   long lastStrong = -1000;
@@ -50,6 +63,9 @@ public final class MainActivity extends Activity {
     super.onCreate(b);
     setVolumeControlStream(AudioManager.STREAM_MUSIC);
     getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    getWindow().setBackgroundDrawable(new ColorDrawable(Palette.BG));
+    getWindow().setStatusBarColor(Palette.BG);
+    getWindow().setNavigationBarColor(Palette.BG);
     prefs = getSharedPreferences("pulse", 0);
     relay = new PcRelay();
     try {
@@ -78,6 +94,11 @@ public final class MainActivity extends Activity {
     closeHit = prefs.getBoolean("closeHit", true);
     pedalOnly = prefs.getBoolean("pedalOnly", false);
     drumsOnly = prefs.getBoolean("drumsOnly", false);
+    outputMode = prefs.getInt("mode", 0);
+    hostDraft = prefs.getString("host", "");
+    codeDraft = prefs.getString("code", "");
+    Palette.theme = themeIndex();
+    if (audio != null) audio.volume = prefs.getFloat("volume", .8f);
     manager = (AudioManager) getSystemService(AUDIO_SERVICE);
     focus =
         new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
@@ -93,6 +114,7 @@ public final class MainActivity extends Activity {
             .build();
     audioFocused = manager.requestAudioFocus(focus) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
     build();
+    configureRelay();
     usb =
         new UsbHub(
             this,
@@ -136,111 +158,139 @@ public final class MainActivity extends Activity {
     ui.post(tick);
   }
 
+  /** Theme index, migrating the 1.0 preference that stored the accent colour itself. */
+  int themeIndex() {
+    if (prefs.contains("themeIndex")) return prefs.getInt("themeIndex", 0);
+    int old = prefs.getInt("theme", 0xff73f59d);
+    return old == 0xffff7373 ? 1 : old == 0xff73b5ff ? 2 : 0;
+  }
+
+  void applyTheme(int index) {
+    if (index == Palette.theme) return;
+    Palette.theme = index;
+    prefs.edit().putInt("themeIndex", index).apply();
+    build();
+  }
+
   int dp(float value) {
     return Math.round(value * getResources().getDisplayMetrics().density);
   }
 
-  TextView text(String value, int size) {
-    TextView v = new TextView(this);
-    v.setText(value);
-    v.setTextSize(size);
-    v.setTextColor(0xffe5eee8);
-    v.setPadding(8, 8, 8, 8);
-    return v;
-  }
-
-  Button button(String label, Runnable action) {
-    Button b = new Button(this);
-    b.setText(label);
-    b.setTextSize(13);
-    b.setTextColor(0xffdbe8df);
-    b.setMinWidth(0);
-    b.setMinimumWidth(0);
-    b.setMinHeight(dp(44));
-    b.setPadding(dp(12), dp(4), dp(12), dp(4));
-    android.graphics.drawable.GradientDrawable bg =
-        new android.graphics.drawable.GradientDrawable();
-    bg.setColor(0xff1a261e);
-    bg.setCornerRadius(dp(10));
-    bg.setStroke(dp(1), 0xff314b3a);
-    b.setBackground(bg);
-    b.setAllCaps(false);
-    b.setOnClickListener(v -> action.run());
-    return b;
-  }
-
-  LinearLayout row() {
-    LinearLayout r =
-        new LinearLayout(this) {
-          @Override
-          public void addView(View child) {
-            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(44), 1);
-            p.setMargins(dp(3), dp(3), dp(3), dp(3));
-            super.addView(child, p);
-          }
-        };
-    r.setOrientation(LinearLayout.HORIZONTAL);
-    return r;
-  }
-
-  void addCheck(
-      LinearLayout into,
-      String label,
-      boolean checked,
-      java.util.function.Consumer<Boolean> change) {
-    CheckBox c = new CheckBox(this);
-    c.setText(label);
-    c.setChecked(checked);
-    c.setOnCheckedChangeListener((v, b) -> change.accept(b));
-    into.addView(c);
-  }
+  // ---------------------------------------------------------------- layout
 
   void build() {
-    ScrollView scroll = new ScrollView(this);
-    root =
-        new LinearLayout(this) {
-          @Override
-          public void addView(View child) {
-            if (child instanceof Button) {
-              LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(44));
-              p.setMargins(0, dp(4), 0, dp(4));
-              super.addView(child, p);
-            } else super.addView(child);
-          }
-        };
-    root.setOrientation(LinearLayout.VERTICAL);
-    root.setPadding(dp(14), dp(12), dp(14), dp(30));
-    root.setBackgroundColor(0xff0b100d);
-    scroll.addView(root);
-    scroll.setOnApplyWindowInsetsListener(
+    if (host != null) {
+      hostDraft = host.getText().toString();
+      codeDraft = code.getText().toString();
+    }
+    Ui u = new Ui(this);
+    LinearLayout screen = u.column();
+    screen.setBackgroundColor(Palette.BG);
+    int side = dp(14);
+    screen.setOnApplyWindowInsetsListener(
         (v, insets) -> {
-          v.setPadding(0, insets.getSystemWindowInsetTop(), 0, insets.getSystemWindowInsetBottom());
+          int l, t, r, b;
+          if (Build.VERSION.SDK_INT >= 30) {
+            android.graphics.Insets bars =
+                insets.getInsets(
+                    WindowInsets.Type.systemBars()
+                        | WindowInsets.Type.displayCutout()
+                        | WindowInsets.Type.ime());
+            l = bars.left;
+            t = bars.top;
+            r = bars.right;
+            b = bars.bottom;
+          } else {
+            l = insets.getSystemWindowInsetLeft();
+            t = insets.getSystemWindowInsetTop();
+            r = insets.getSystemWindowInsetRight();
+            b = insets.getSystemWindowInsetBottom();
+          }
+          v.setPadding(l + side, t + dp(4), r + side, b + dp(10));
           return insets;
         });
-    setContentView(scroll);
-    LinearLayout title = row();
-    TextView brand = text("PULSE / MOBILE", 20);
-    title.addView(brand, new LinearLayout.LayoutParams(0, -2, 1));
-    for (int color : new int[] {0xff73f59d, 0xffff7373, 0xff73b5ff}) {
-      Button dot =
-          button(
-              "●",
-              () -> {
-                kit.accent = color;
-                prefs.edit().putInt("theme", color).apply();
-                kit.invalidate();
-              });
-      dot.setTextColor(color);
-      dot.setTextSize(22);
-      dot.setPadding(0, 0, 0, 0);
-      dot.setBackgroundColor(Color.TRANSPARENT);
-      dot.setContentDescription(
-          color == 0xff73f59d ? "Green theme" : color == 0xffff7373 ? "Red theme" : "Blue theme");
-      title.addView(dot, new LinearLayout.LayoutParams(dp(34), dp(44)));
+    screen.addView(header(u), new LinearLayout.LayoutParams(-1, dp(52)));
+
+    SplitLayout split = new SplitLayout(this, dp(12), dp(300));
+    split.addView(stage(u));
+    ScrollView scroll = new ScrollView(this);
+    scroll.setVerticalScrollBarEnabled(false);
+    scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+    scroll.setFillViewport(true);
+    LinearLayout panel = u.column();
+    panel.setPadding(0, 0, 0, dp(8));
+    scroll.addView(panel);
+    split.addView(scroll);
+    screen.addView(split, new LinearLayout.LayoutParams(-1, 0, 1));
+
+    learnCard = learnCard(u);
+    learnCard.setVisibility(View.GONE);
+    panel.addView(learnCard);
+    u.add(panel, padCard(u), 0);
+    u.add(panel, outputCard(u), 12);
+    u.add(panel, setupCard(u), 12);
+    u.add(panel, pedalCard(u), 12);
+    u.add(panel, deviceCard(u), 12);
+    ((LinearLayout.LayoutParams) panel.getChildAt(1).getLayoutParams()).topMargin = 0;
+    setContentView(screen);
+    screen.requestApplyInsets();
+    select();
+    showLearn();
+    refreshStatus();
+  }
+
+  View header(Ui u) {
+    LinearLayout h = u.row();
+    h.addView(u.logo(), new LinearLayout.LayoutParams(dp(30), dp(30)));
+    TextView word = u.text("pulse", 23, Palette.TEXT);
+    word.setTypeface(Typeface.DEFAULT_BOLD);
+    word.setLetterSpacing(-.03f);
+    word.setPadding(dp(9), 0, 0, dp(2));
+    h.addView(word);
+    TextView tag = u.caption("Mobile");
+    tag.setPadding(dp(12), dp(4), 0, 0);
+    h.addView(tag);
+    h.addView(u.spacer());
+    for (int i = 0; i < 3; i++) {
+      int index = i;
+      h.addView(
+          u.swatch(
+              Palette.SWATCHES[i],
+              i == Palette.theme,
+              Palette.NAMES[i] + " theme",
+              () -> applyTheme(index)),
+          new LinearLayout.LayoutParams(dp(40), dp(44)));
     }
-    root.addView(title);
-    status = text("USB OTG · Phone audio · Local Wi-Fi", 12);
-    root.addView(status);
+    return h;
+  }
+
+  View stage(Ui u) {
+    final int strip = dp(30);
+    class Stage extends LinearLayout implements SplitLayout.Stage {
+      Stage() {
+        super(MainActivity.this);
+      }
+
+      public int headerHeight() {
+        return strip;
+      }
+    }
+    Stage s = new Stage();
+    s.setOrientation(LinearLayout.VERTICAL);
+    LinearLayout top = u.row();
+    top.setPadding(dp(4), 0, dp(4), 0);
+    top.addView(u.caption("Live kit"));
+    liveText = u.text("", 11, Palette.c(Palette.ACCENT));
+    liveText.setSingleLine();
+    liveText.setEllipsize(TextUtils.TruncateAt.END);
+    liveText.setPadding(dp(10), 0, dp(10), 0);
+    top.addView(liveText, new LinearLayout.LayoutParams(0, -2, 1));
+    top.addView(u.caption("Hits"));
+    hitsText = u.text(String.valueOf(sessionHits), 13, Palette.TEXT);
+    hitsText.setTypeface(Typeface.MONOSPACE);
+    hitsText.setPadding(dp(8), 0, 0, 0);
+    top.addView(hitsText);
+    s.addView(top, new LinearLayout.LayoutParams(-1, strip));
     kit =
         new KitView(
             this,
@@ -250,204 +300,419 @@ public final class MainActivity extends Activity {
               play(p, 110);
               relay.send("TOUCH," + p + ",110");
             });
-    kit.accent = prefs.getInt("theme", 0xff73f59d);
-    root.addView(kit, new LinearLayout.LayoutParams(-1, -2));
-    selection = text("Hi-hat · A2", 20);
-    root.addView(selection);
-    LinearLayout actions = row();
-    actions.addView(button("Assign pad", () -> startLearn(false)));
-    actions.addView(button("Import WAV", () -> importWave(selected)));
-    actions.addView(
-        button(
-            "Synth",
-            () -> {
-              if (audio != null) {
-                audio.load(selected, new File(getFilesDir(), "synth-" + selected + ".wav"));
-                new File(getFilesDir(), "custom-" + selected + ".wav").delete();
+    kit.selected = selected;
+    s.addView(kit, new LinearLayout.LayoutParams(-1, 0, 1));
+    return s;
+  }
+
+  LinearLayout learnCard(Ui u) {
+    LinearLayout c = u.card();
+    c.setBackground(u.shape(Palette.c(0xff1b2a18), Palette.c(0xff4d6b2f), 12));
+    learnTitle = u.text("", 18, Palette.TEXT);
+    learnTitle.setTypeface(Typeface.DEFAULT_BOLD);
+    c.addView(learnTitle);
+    learnText = u.text("", 13, Palette.SOFT_TEXT);
+    u.add(c, learnText, 6);
+    u.add(
+        c,
+        u.buttons(
+            u.button("Undo last part", this::undoLearn),
+            u.button(
+                "Cancel setup",
+                () -> {
+                  learn = -1;
+                  showLearn();
+                })),
+        12);
+    LinearLayout wrap = u.column();
+    wrap.addView(c);
+    wrap.setPadding(0, 0, 0, dp(12));
+    return wrap;
+  }
+
+  View padCard(Ui u) {
+    LinearLayout c = u.card();
+    LinearLayout head = u.row();
+    head.addView(u.caption("Pad settings"), new LinearLayout.LayoutParams(0, -2, 1));
+    head.addView(u.small("Assign input", () -> startLearn(false)));
+    c.addView(head);
+    LinearLayout name = u.row();
+    padName = u.text("", 28, Palette.TEXT);
+    padName.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+    name.addView(padName, new LinearLayout.LayoutParams(0, -2, 1));
+    padInput = u.text("", 13, Palette.MUTED);
+    name.addView(padInput);
+    u.add(c, name, 8);
+    gainRow =
+        u.new SliderRow(
+            "Sample gain",
+            36,
+            24,
+            p -> {
+              if (audio != null) audio.gains[selected] = (float) Math.pow(10, (p - 24) / 20.0);
+              gainRow.value.setText(String.format(Locale.ROOT, "%+.1f dB", (float) (p - 24)));
+            },
+            () ->
+                prefs
+                    .edit()
+                    .putFloat("gain" + selected, audio == null ? 1 : audio.gains[selected])
+                    .apply());
+    u.add(c, gainRow, 14);
+
+    u.add(c, u.caption("Sound"), 8);
+    soundName = u.text("", 14, 0xffeaf0e4);
+    soundName.setGravity(Gravity.CENTER_VERTICAL);
+    soundName.setPadding(dp(12), 0, dp(12), 0);
+    soundName.setBackground(u.shape(Palette.FIELD, Palette.FIELD_LINE, 6));
+    u.add(c, soundName, 8);
+    soundName.getLayoutParams().height = dp(40);
+    u.add(
+        c,
+        u.buttons(
+            u.button("Load WAV…", () -> importWave(selected)),
+            u.button("Use synth", this::useSynth)),
+        8);
+    openHat = u.button("Load open hi-hat WAV…", () -> importWave(8));
+    u.add(c, openHat, 8);
+
+    hitRow =
+        u.new SliderRow(
+            "Trigger threshold",
+            1000,
+            0,
+            p -> {
+              int hit = curve(p, 2, 1022);
+              hitRow.value.setText(String.valueOf(hit));
+              int reset = currentReset();
+              if (reset >= hit) {
+                resetRow.slider.set(uncurve(hit - 1, 1, Math.max(2, hit - 1)));
+                resetRow.value.setText(String.valueOf(hit - 1));
               }
-            }));
-    root.addView(actions);
-    root.addView(button("Selected pad gain", () -> gainDialog()));
-    root.addView(button("Trigger thresholds", this::thresholdDialog));
-    root.addView(button("Import open hi-hat WAV", () -> importWave(8)));
-    root.addView(button("Download V05 acoustic kit", this::downloadKit));
-    root.addView(text("OUTPUT", 12));
-    mode = new Spinner(this);
-    mode.setAdapter(
-        new ArrayAdapter<>(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            new String[] {"Phone output", "Pulse PC over Wi-Fi", "Phone + Pulse PC"}));
-    mode.setSelection(prefs.getInt("mode", 0));
-    root.addView(mode);
-    root.addView(text("Phone master volume", 14));
-    SeekBar volume = new SeekBar(this);
-    volume.setMax(100);
-    volume.setProgress((int) (prefs.getFloat("volume", .8f) * 100));
-    if (audio != null) audio.volume = volume.getProgress() / 100f;
-    volume.setOnSeekBarChangeListener(
-        new SeekBar.OnSeekBarChangeListener() {
-          public void onProgressChanged(SeekBar s, int p, boolean u) {
-            if (audio != null) audio.volume = p / 100f;
-            prefs.edit().putFloat("volume", p / 100f).apply();
-          }
+            },
+            this::saveThresholds);
+    u.add(c, hitRow, 14);
+    resetRow =
+        u.new SliderRow(
+            "Re-arm threshold",
+            1000,
+            0,
+            p -> resetRow.value.setText(String.valueOf(currentReset())),
+            this::saveThresholds);
+    u.add(c, resetRow, 4);
+    thresholdNote = u.muted("");
+    u.add(c, thresholdNote, 2);
 
-          public void onStartTrackingTouch(SeekBar s) {}
-
-          public void onStopTrackingTouch(SeekBar s) {}
-        });
-    root.addView(volume);
-    host = new EditText(this);
-    host.setSingleLine();
-    host.setHint("PC IPv4 address shown in Pulse");
-    host.setText(prefs.getString("host", ""));
-    root.addView(host);
-    code = new EditText(this);
-    code.setSingleLine();
-    code.setHint("Pairing code shown in Pulse");
-    code.setText(prefs.getString("code", ""));
-    root.addView(code);
-    root.addView(button("Save Wi-Fi connection", this::configureRelay));
-    mode.setOnItemSelectedListener(
-        new android.widget.AdapterView.OnItemSelectedListener() {
-          public void onItemSelected(android.widget.AdapterView<?> p, View v, int n, long id) {
-            configureRelay();
-          }
-
-          public void onNothingSelected(android.widget.AdapterView<?> p) {}
-        });
-    root.addView(text("KIT SETUP", 12));
-    LinearLayout setup = row();
-    setup.addView(button("Assign all", () -> startLearn(true)));
-    setup.addView(
-        button(
-            "Undo",
+    Button audition =
+        u.primary(
+            "▶  Audition",
             () -> {
-              if (!undo.isEmpty()) {
-                inputs = undo.remove(undo.size() - 1);
-                learn = undoParts.remove(undoParts.size() - 1);
-                candidate = -1;
-                confirmations = 0;
-                saveMap();
-                showLearn();
-              }
-            }));
-    setup.addView(
-        button(
-            "Done / cancel",
-            () -> {
-              learn = -1;
-              showLearn();
-            }));
-    root.addView(setup);
-    learnText = text("Hit each requested pad twice. Advances automatically.", 14);
-    root.addView(learnText);
-    LinearLayout protections = row();
-    for (int g : new int[] {110, 70, 35})
-      protections.addView(
-          button(
-              g == 110 ? "Guard: high" : g == 70 ? "Medium" : "Low",
-              () -> {
-                guard = g;
-                prefs.edit().putInt("guard", g).apply();
-                toast("Repeat-hit guard: " + g + " ms");
-              }));
-    root.addView(protections);
-    root.addView(text("PEDALS", 12));
-    pedalText = text("Waiting for pedal Nano", 13);
-    root.addView(pedalText);
-    addCheck(
-        root,
-        "Swap kick / hi-hat inputs",
-        swap,
-        b -> {
-          swap = b;
-          int r = kickRest, d = kickDown;
-          kickRest = hatRest;
-          kickDown = hatDown;
-          hatRest = r;
-          hatDown = d;
-          pedalInitialized = false;
-          savePedals();
-        });
-    addCheck(
-        root,
-        "Play hi-hat on fast pedal close",
-        closeHit,
-        b -> {
-          closeHit = b;
-          savePedals();
-        });
-    Spinner kickMode = new Spinner(this);
-    kickMode.setAdapter(
-        new ArrayAdapter<>(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            new String[] {"Kick: drums + pedal", "Kick: pedal only", "Kick: drums only"}));
-    kickMode.setSelection(pedalOnly ? 1 : drumsOnly ? 2 : 0);
-    kickMode.setOnItemSelectedListener(
-        new android.widget.AdapterView.OnItemSelectedListener() {
-          public void onItemSelected(android.widget.AdapterView<?> p, View v, int n, long id) {
-            pedalOnly = n == 1;
-            drumsOnly = n == 2;
-            savePedals();
-          }
+              play(selected, 110);
+              relay.send("TOUCH," + selected + ",110");
+            });
+    Button reset = u.button("Reset", this::resetPad);
+    LinearLayout actions = u.row();
+    actions.addView(audition, new LinearLayout.LayoutParams(0, -2, 2.2f));
+    LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, -2, 1);
+    rp.leftMargin = dp(8);
+    actions.addView(reset, rp);
+    u.add(c, actions, 14);
+    return c;
+  }
 
-          public void onNothingSelected(android.widget.AdapterView<?> p) {}
-        });
-    root.addView(kickMode);
-    LinearLayout endpoints = row();
-    endpoints.addView(
-        button(
-            "Set resting",
-            () -> {
-              kickRest = kickRaw;
-              hatRest = hatRaw;
+  View outputCard(Ui u) {
+    LinearLayout c = u.card();
+    LinearLayout head = u.row();
+    head.addView(u.caption("Output"), new LinearLayout.LayoutParams(0, -2, 1));
+    head.addView(u.muted("Stereo sample engine"));
+    c.addView(head);
+    u.add(
+        c,
+        u.segmented(
+            OUTPUTS,
+            outputMode,
+            n -> {
+              outputMode = n;
+              configureRelay();
+            }),
+        10);
+    int level = Math.round(prefs.getFloat("volume", .8f) * 100);
+    volumeRow =
+        u.new SliderRow(
+            "Master volume",
+            100,
+            level,
+            p -> {
+              if (audio != null) audio.volume = p / 100f;
+              volumeRow.value.setText(p + "%");
+            },
+            () -> prefs.edit().putFloat("volume", volumeRow.slider.progress / 100f).apply());
+    volumeRow.value.setText(level + "%");
+    u.add(c, volumeRow, 14);
+
+    u.add(c, u.caption("Pulse PC over Wi-Fi"), 14);
+    host =
+        u.field(
+            "PC IPv4 address shown in Pulse",
+            hostDraft,
+            InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+    code = u.field("Pairing code", codeDraft, InputType.TYPE_CLASS_NUMBER);
+    LinearLayout fields = u.row();
+    fields.addView(host, new LinearLayout.LayoutParams(0, -2, 1.6f));
+    LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, -2, 1);
+    cp.leftMargin = dp(8);
+    fields.addView(code, cp);
+    u.add(c, fields, 8);
+    u.add(c, u.button("Save Wi-Fi connection", this::saveRelay), 8);
+    relayText = u.muted("");
+    u.add(c, relayText, 8);
+    return c;
+  }
+
+  View setupCard(Ui u) {
+    LinearLayout c = u.card();
+    c.addView(u.caption("Kit setup"));
+    u.add(
+        c,
+        u.buttons(
+            u.button("Set up my kit", () -> startLearn(true)),
+            u.button("Assign selected pad", () -> startLearn(false))),
+        10);
+    setupText =
+        u.muted(
+            "Strike each requested pad twice, at least 350 ms apart. The next part follows"
+                + " automatically.");
+    u.add(c, setupText, 8);
+    u.add(c, u.text("Repeat-hit guard", 13, Palette.SOFT_TEXT), 14);
+    int current = 1;
+    for (int i = 0; i < GUARDS.length; i++) if (GUARDS[i] == guard) current = i;
+    u.add(
+        c,
+        u.segmented(
+            new String[] {"High · 110 ms", "Medium · 70", "Low · 35"},
+            current,
+            n -> {
+              guard = GUARDS[n];
+              prefs.edit().putInt("guard", guard).apply();
+            }),
+        8);
+    return c;
+  }
+
+  View pedalCard(Ui u) {
+    LinearLayout c = u.card();
+    c.addView(u.caption("Pedals"));
+    pedalText = u.text("", 13, Palette.SOFT_TEXT);
+    u.add(c, pedalText, 8);
+    kickMeter = u.new Meter();
+    hatMeter = u.new Meter();
+    u.add(c, meterRow(u, "Kick", kickMeter), 6);
+    u.add(c, meterRow(u, "Hi-hat", hatMeter), 2);
+    u.add(
+        c,
+        u.toggle(
+            "Swap kick / hi-hat inputs",
+            swap,
+            b -> {
+              swap = b;
+              int r = kickRest, d = kickDown;
+              kickRest = hatRest;
+              kickDown = hatDown;
+              hatRest = r;
+              hatDown = d;
               pedalInitialized = false;
               savePedals();
-            }));
-    endpoints.addView(
-        button(
-            "Set pressed",
-            () -> {
-              kickDown = kickRaw;
-              hatDown = hatRaw;
-              pedalInitialized = false;
+            }),
+        4);
+    u.add(
+        c,
+        u.toggle(
+            "Play hi-hat on fast pedal close",
+            closeHit,
+            b -> {
+              closeHit = b;
               savePedals();
-            }));
-    root.addView(endpoints);
-    root.addView(
-        button(
+            }),
+        0);
+    u.add(c, u.text("Kick source", 13, Palette.SOFT_TEXT), 8);
+    u.add(
+        c,
+        u.segmented(
+            new String[] {"Drums + pedal", "Pedal only", "Drums only"},
+            pedalOnly ? 1 : drumsOnly ? 2 : 0,
+            n -> {
+              pedalOnly = n == 1;
+              drumsOnly = n == 2;
+              savePedals();
+            }),
+        8);
+    u.add(
+        c,
+        u.buttons(
+            u.button(
+                "Set resting",
+                () -> {
+                  kickRest = kickRaw;
+                  hatRest = hatRaw;
+                  pedalInitialized = false;
+                  savePedals();
+                  toast("Resting position saved");
+                }),
+            u.button(
+                "Set pressed",
+                () -> {
+                  kickDown = kickRaw;
+                  hatDown = hatRaw;
+                  pedalInitialized = false;
+                  savePedals();
+                  toast("Pressed position saved");
+                })),
+        12);
+    return c;
+  }
+
+  View meterRow(Ui u, String label, Ui.Meter meter) {
+    LinearLayout r = u.row();
+    r.addView(u.muted(label), new LinearLayout.LayoutParams(dp(54), -2));
+    r.addView(meter, new LinearLayout.LayoutParams(0, dp(16), 1));
+    return r;
+  }
+
+  View deviceCard(Ui u) {
+    LinearLayout c = u.card();
+    c.addView(u.caption("Sounds & USB"));
+    u.add(c, u.button("Download V05 acoustic kit", this::downloadKit), 10);
+    u.add(
+        c,
+        u.button(
             "Retry USB permissions",
             () -> {
               if (usb != null) usb.retry();
-            }));
-    root.addView(
-        text(
+            }),
+        8);
+    usbText = u.text("", 13, Palette.SOFT_TEXT);
+    u.add(c, usbText, 10);
+    u.add(
+        c,
+        u.muted(
             "Keep Pulse Mobile open while playing. Use a powered OTG hub if the phone cannot power"
-                + " both Nanos. Connect wired headphones, USB audio or the phone speaker; Bluetooth"
-                + " adds delay. PC mode uses the PC's mappings, pedal settings, samples and MIDI"
-                + " output. Phone controls apply to phone playback.",
-            12));
+                + " both Nanos. Wired headphones, USB audio or the phone speaker work best;"
+                + " Bluetooth adds delay. PC mode uses the PC's mappings, pedal settings, samples"
+                + " and MIDI output."),
+        10);
+    return c;
+  }
+
+  // ---------------------------------------------------------------- state
+
+  static int curve(int position, int low, int high) {
+    double t = position / 1000.0;
+    return low + (int) Math.round((high - low) * t * t);
+  }
+
+  static int uncurve(int value, int low, int high) {
+    if (high <= low) return 0;
+    double t = Math.max(0, Math.min(1, (value - low) / (double) (high - low)));
+    return (int) Math.round(Math.sqrt(t) * 1000);
+  }
+
+  int currentHit() {
+    return curve(hitRow.slider.progress, 2, 1022);
+  }
+
+  int currentReset() {
+    int hit = currentHit();
+    return Math.min(hit - 1, curve(resetRow.slider.progress, 1, Math.max(2, hit - 1)));
+  }
+
+  void saveThresholds() {
+    int input = inputs[selected];
+    int hit = currentHit(), reset = Math.max(1, currentReset());
+    prefs.edit().putInt("threshold" + input, hit).putInt("reset" + input, reset).apply();
+    if (usb != null) usb.applyThresholds();
+    thresholdNote.setText("A" + input + " saved · sent to drum Nano when connected");
+  }
+
+  void loadThresholds() {
+    int input = inputs[selected];
+    int hit = prefs.getInt("threshold" + input, DEFAULT_HITS[input]);
+    int reset = prefs.getInt("reset" + input, DEFAULT_RESETS[input]);
+    hitRow.slider.set(uncurve(hit, 2, 1022));
+    hitRow.value.setText(String.valueOf(hit));
+    resetRow.slider.set(uncurve(reset, 1, Math.max(2, hit - 1)));
+    resetRow.value.setText(String.valueOf(reset));
+    thresholdNote.setText("Physical input A" + input + " · hit 2–1022, re-arm below hit");
+  }
+
+  void resetPad() {
+    int input = inputs[selected];
+    prefs
+        .edit()
+        .remove("threshold" + input)
+        .remove("reset" + input)
+        .putFloat("gain" + selected, 1)
+        .apply();
+    if (audio != null) audio.gains[selected] = 1;
+    if (usb != null) usb.applyThresholds();
     select();
+    toast(KitView.NAMES[selected] + " gain and thresholds reset");
+  }
+
+  void useSynth() {
+    if (audio != null) {
+      audio.load(selected, new File(getFilesDir(), "synth-" + selected + ".wav"));
+      new File(getFilesDir(), "custom-" + selected + ".wav").delete();
+      if (selected == 0) {
+        audio.load(8, new File(getFilesDir(), "synth-8.wav"));
+        new File(getFilesDir(), "custom-8.wav").delete();
+      }
+    }
+    select();
+  }
+
+  void saveRelay() {
+    configureRelay();
+    View focus = getCurrentFocus();
+    if (focus != null) {
+      focus.clearFocus();
+      android.view.inputmethod.InputMethodManager m =
+          (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+      if (m != null) m.hideSoftInputFromWindow(focus.getWindowToken(), 0);
+    }
+    toast(outputMode == 0 ? "Saved. Choose Pulse PC or Both to send hits." : "Wi-Fi connection saved");
   }
 
   void configureRelay() {
     if (host == null || code == null) return;
-    int m = mode.getSelectedItemPosition();
     String h = host.getText().toString().trim(), c = code.getText().toString().trim();
-    prefs.edit().putString("host", h).putString("code", c).putInt("mode", m).apply();
-    relay.configure(h, c, m != 0);
+    prefs.edit().putString("host", h).putString("code", c).putInt("mode", outputMode).apply();
+    relay.configure(h, c, outputMode != 0);
   }
 
   void select() {
+    if (kit == null) return;
     kit.selected = selected;
-    selection.setText(KitView.NAMES[selected] + " · A" + inputs[selected]);
+    kit.invalidate();
+    padName.setText(KitView.NAMES[selected]);
+    padInput.setText("Input A" + inputs[selected]);
+    int gain =
+        audio == null ? 24 : (int) Math.round(20 * Math.log10(audio.gains[selected])) + 24;
+    gainRow.slider.set(gain);
+    gainRow.value.setText(String.format(Locale.ROOT, "%+.1f dB", (float) (gainRow.slider.progress - 24)));
+    boolean custom = new File(getFilesDir(), "custom-" + selected + ".wav").exists();
+    soundName.setText(custom ? "Custom WAV" : "Pulse synth");
+    openHat.setVisibility(selected == 0 ? View.VISIBLE : View.GONE);
+    if (selected == 0) {
+      boolean openCustom = new File(getFilesDir(), "custom-8.wav").exists();
+      openHat.setText(openCustom ? "Open hi-hat: custom WAV · replace…" : "Load open hi-hat WAV…");
+    }
+    loadThresholds();
   }
 
   void play(int part, int velocity) {
-    kit.flash(part);
-    if (audio != null && audioFocused && mode.getSelectedItemPosition() != 1)
+    kit.flash(part, velocity);
+    sessionHits++;
+    if (hitsText != null) hitsText.setText(String.valueOf(sessionHits));
+    if (audio != null && audioFocused && outputMode != 1)
       audio.hit(
           part, velocity, part == 0 && SystemClock.elapsedRealtime() - pedalSeen < 500 && !closed);
   }
@@ -495,16 +760,38 @@ public final class MainActivity extends Activity {
     showLearn();
   }
 
+  void undoLearn() {
+    if (undo.isEmpty()) {
+      toast("Nothing to undo yet");
+      return;
+    }
+    inputs = undo.remove(undo.size() - 1);
+    learn = undoParts.remove(undoParts.size() - 1);
+    candidate = -1;
+    confirmations = 0;
+    saveMap();
+    showLearn();
+  }
+
   void showLearn() {
-    learnText.setText(
-        learn < 0
-            ? "Setup finished / idle. Assignments saved."
-            : "Play " + KitView.NAMES[learn] + " twice · " + confirmations + " / 2 confirmed");
-    if (learn >= 0) {
+    if (kit == null) return;
+    kit.learning = learn;
+    if (learn < 0) {
+      learnCard.setVisibility(View.GONE);
+    } else {
+      learnCard.setVisibility(View.VISIBLE);
+      String name = KitView.NAMES[learn];
+      learnTitle.setText("Assign · " + name);
+      learnText.setText(
+          (learningAll ? "Part " + (learn + 1) + " of 8 · " : "")
+              + confirmations
+              + " of 2 heard. Strike "
+              + name
+              + (confirmations == 0 ? " twice." : " once more to confirm."));
       selected = learn;
       select();
-      kit.invalidate();
     }
+    kit.invalidate();
   }
 
   void saveMap() {
@@ -534,6 +821,10 @@ public final class MainActivity extends Activity {
     hatRaw = swap ? a : b;
     float k = SerialProtocol.position(kickRaw, kickRest, kickDown),
         h = SerialProtocol.position(hatRaw, hatRest, hatDown);
+    if (kickMeter != null) {
+      kickMeter.set(k);
+      hatMeter.set(h);
+    }
     long dt = (time - pedalTime) & 0xffffffffL;
     pedalTime = time;
     if (!pedalInitialized || dt > 100) {
@@ -571,94 +862,27 @@ public final class MainActivity extends Activity {
     previousHat = h;
   }
 
+  void refreshStatus() {
+    if (liveText == null) return;
+    boolean drums = !"waiting".equals(drumDevice);
+    String target = outputMode == 0 ? "Phone audio" : outputMode == 1 ? "Pulse PC" : "Phone + PC";
+    liveText.setText((drums ? "Drums connected" : "Waiting for drum Nano") + " · " + target);
+    usbText.setText(usbStatus + "\nDrums: " + drumDevice + " · Pedals: " + pedalDevice);
+    relayText.setText(outputMode == 0 ? "PC relay off · phone output only" : relay.status);
+    boolean live = SystemClock.elapsedRealtime() - pedalSeen < 500;
+    pedalText.setText(
+        live
+            ? "Kick " + kickRaw + " · Hi-hat " + hatRaw + " · " + (closed ? "Closed" : "Open")
+            : "Waiting for pedal Nano");
+  }
+
   final Runnable tick =
       new Runnable() {
         public void run() {
-          status.setText(
-              usbStatus
-                  + "\nDrums: "
-                  + drumDevice
-                  + " · Pedals: "
-                  + pedalDevice
-                  + "\n"
-                  + relay.status);
-          pedalText.setText(
-              "Kick "
-                  + kickRaw
-                  + " · Hi-hat "
-                  + hatRaw
-                  + (SystemClock.elapsedRealtime() - pedalSeen < 500
-                      ? (closed ? " · Closed" : " · Open")
-                      : " · No pedal data"));
+          refreshStatus();
           ui.postDelayed(this, 250);
         }
       };
-
-  void thresholdDialog() {
-    int input = inputs[selected];
-    int[] defaults = {140, 20, 20, 20, 10, 60, 10, 10}, resets = {40, 5, 10, 5, 1, 1, 5, 9};
-    LinearLayout box = new LinearLayout(this);
-    box.setOrientation(LinearLayout.VERTICAL);
-    box.addView(text("Physical A" + input + " · 2–1022 hit, reset below hit", 13));
-    EditText hit = new EditText(this), reset = new EditText(this);
-    hit.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-    reset.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-    hit.setText("" + prefs.getInt("threshold" + input, defaults[input]));
-    reset.setText("" + prefs.getInt("reset" + input, resets[input]));
-    box.addView(text("Hit threshold", 14));
-    box.addView(hit);
-    box.addView(text("Reset threshold", 14));
-    box.addView(reset);
-    new AlertDialog.Builder(this)
-        .setTitle(KitView.NAMES[selected] + " trigger")
-        .setView(box)
-        .setNegativeButton("Cancel", null)
-        .setPositiveButton(
-            "Apply",
-            (d, w) -> {
-              try {
-                int h = Integer.parseInt(hit.getText().toString()),
-                    r = Integer.parseInt(reset.getText().toString());
-                if (h < 2 || h > 1022 || r < 1 || r >= h) throw new NumberFormatException();
-                prefs.edit().putInt("threshold" + input, h).putInt("reset" + input, r).apply();
-                if (usb != null) usb.applyThresholds();
-                toast("Thresholds saved and queued to the drum Nano");
-              } catch (NumberFormatException e) {
-                toast("Invalid thresholds. Hit: 2–1022; reset: 1 to hit minus 1.");
-              }
-            })
-        .show();
-  }
-
-  void gainDialog() {
-    int part = selected;
-    LinearLayout box = new LinearLayout(this);
-    box.setOrientation(LinearLayout.VERTICAL);
-    TextView value = text("", 16);
-    SeekBar gain = new SeekBar(this);
-    gain.setMax(36);
-    gain.setProgress((int) (20 * Math.log10(audio == null ? 1 : audio.gains[part])) + 24);
-    value.setText((gain.getProgress() - 24) + " dB");
-    gain.setOnSeekBarChangeListener(
-        new SeekBar.OnSeekBarChangeListener() {
-          public void onProgressChanged(SeekBar s, int p, boolean u) {
-            value.setText((p - 24) + " dB");
-            if (audio != null) audio.gains[part] = (float) Math.pow(10, (p - 24) / 20.0);
-            prefs.edit().putFloat("gain" + part, audio == null ? 1 : audio.gains[part]).apply();
-          }
-
-          public void onStartTrackingTouch(SeekBar s) {}
-
-          public void onStopTrackingTouch(SeekBar s) {}
-        });
-    box.addView(value);
-    box.addView(gain);
-    new AlertDialog.Builder(this)
-        .setTitle(KitView.NAMES[part] + " gain")
-        .setView(box)
-        .setPositiveButton("Done", null)
-        .show();
-  }
 
   void importWave(int part) {
     importPart = part;
@@ -705,6 +929,7 @@ public final class MainActivity extends Activity {
                     () -> {
                       if (audio != null && audio.load(part, dest)) toast("Sample loaded");
                       else toast("Sample could not load");
+                      select();
                     });
               } catch (Exception e) {
                 ui.post(() -> toast(e.getMessage()));
@@ -760,7 +985,11 @@ public final class MainActivity extends Activity {
                             if (audio != null && !audio.load(part, dest))
                               throw new IOException("Could not load sample " + (part + 1));
                           }
-                          ui.post(() -> toast("V05 kit ready. Samples stay available offline."));
+                          ui.post(
+                              () -> {
+                                toast("V05 kit ready. Samples stay available offline.");
+                                select();
+                              });
                         } catch (Exception e) {
                           ui.post(
                               () ->

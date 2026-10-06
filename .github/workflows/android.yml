@@ -14,7 +14,8 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Install Android platform
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+        # sdkmanager ships in the runner's SDK but is not on PATH.
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
       - name: Build, test and lint
         working-directory: android
         run: bash ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug --console=plain
