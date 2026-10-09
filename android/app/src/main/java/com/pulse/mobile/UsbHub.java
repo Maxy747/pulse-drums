@@ -24,11 +24,13 @@ final class UsbHub implements AutoCloseable {
   final Set<Integer> mainIds = ConcurrentHashMap.newKeySet();
   volatile int thresholdVersion;
   final Set<Integer> opening = ConcurrentHashMap.newKeySet();
+  final Map<Integer, Long> retryAfter = new ConcurrentHashMap<>();
   final ExecutorService workers = Executors.newCachedThreadPool();
   final Handler handler = new Handler(Looper.getMainLooper());
   final String permission;
   volatile boolean stopped;
   Integer permissionPending;
+  String lastStatus = "";
   final Set<Integer> denied = new HashSet<>();
   final BroadcastReceiver receiver =
       new BroadcastReceiver() {
@@ -42,6 +44,7 @@ final class UsbHub implements AutoCloseable {
             UsbDevice d = i.getParcelableExtra(UsbManager.EXTRA_DEVICE);
             if (d != null) {
               denied.remove(d.getDeviceId());
+              retryAfter.remove(d.getDeviceId());
               closePort(d.getDeviceId());
             }
           } else scan();
@@ -77,6 +80,7 @@ final class UsbHub implements AutoCloseable {
 
   void retry() {
     denied.clear();
+    retryAfter.clear();
     scan();
   }
 
@@ -86,6 +90,8 @@ final class UsbHub implements AutoCloseable {
       UsbDevice d = driver.getDevice();
       int id = d.getDeviceId();
       if (ports.containsKey(id) || opening.contains(id) || denied.contains(id)) continue;
+      Long next = retryAfter.get(id);
+      if (next != null && SystemClock.elapsedRealtime() < next) continue;
       if (!manager.hasPermission(d)) {
         if (permissionPending == null) {
           permissionPending = id;
@@ -102,8 +108,14 @@ final class UsbHub implements AutoCloseable {
       opening.add(id);
       workers.execute(() -> read(driver));
     }
-    listener.status(
+    setStatus(
         ports.size() + " Nano USB connection" + (ports.size() == 1 ? "" : "s") + " · 115200 baud");
+  }
+
+  void setStatus(String status) {
+    if (status.equals(lastStatus)) return;
+    lastStatus = status;
+    listener.status(status);
   }
 
   void read(UsbSerialDriver driver) {
@@ -160,7 +172,8 @@ final class UsbHub implements AutoCloseable {
         if (n > 0) decoder.feed(buffer, n, SystemClock.elapsedRealtime());
       }
     } catch (Exception e) {
-      listener.status("USB " + id + ": " + e.getMessage());
+      retryAfter.put(id, SystemClock.elapsedRealtime() + 8000);
+      setStatus("USB " + id + ": " + e.getMessage() + " · retrying soon");
     } finally {
       ports.remove(id, port);
       mainIds.remove(id);

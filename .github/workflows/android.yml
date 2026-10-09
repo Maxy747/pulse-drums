@@ -1,6 +1,7 @@
 name: Android build
 on:
   push:
+    branches: [main]
     paths: ['android/**', '.github/workflows/android.yml']
   pull_request:
     paths: ['android/**', '.github/workflows/android.yml']
@@ -13,6 +14,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - uses: android-actions/setup-android@v3
       - name: Install Android platform
         # sdkmanager ships in the runner's SDK but is not on PATH.
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
